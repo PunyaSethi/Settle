@@ -57,8 +57,11 @@ REPLY_MIX: Final[dict[DebtorBehaviour, dict[str, float]]] = {
     for behaviour in DebtorBehaviour
 }
 
-# Contacts before `go_silent` stops answering and `opt_out_midway` opts out.
-DISENGAGE_AFTER_CONTACTS: Final[int] = 2
+# Contacts before `go_silent` stops answering and `opt_out_midway` opts out,
+# and what a complaint costs in patience. Both live in PARAMS with PRIORS rows:
+# they move the opt-outs-induced count, which is a §14.4 headline (SPEC §15).
+DISENGAGE_AFTER_CONTACTS: Final[int] = int(PARAMS["debtor.disengage_after_contacts"])
+COMPLAINT_PATIENCE_COST: Final[int] = int(PARAMS["patience.complaint_cost"])
 
 
 def reply(
@@ -92,5 +95,5 @@ def reply(
         # `truth`, not this draw.
         promise_in_days = 1 + int(streams.value(case_id, "patience_draw", tick) * 14)
 
-    spent = 2 if kind is ReplyKind.COMPLAINT else 1
+    spent = COMPLAINT_PATIENCE_COST if kind is ReplyKind.COMPLAINT else 1
     return Reply(kind=kind, promise_in_days=promise_in_days, patience_spent=spent)

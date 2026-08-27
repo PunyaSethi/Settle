@@ -6,21 +6,27 @@ this table, in the README, and in the run output (INV-10).
 
 INV-10 covers every number that can move a reported metric, including the ones
 that describe the shape of the action space or of a behaviour (SPEC §15).
-`action_lift.*` decides whether a retry outperforms a message and is therefore
-upstream of every rupee in §14.4; `reply_mix.*` drives the promise-kept rate and
-the opt-outs-induced count. "Structural, not fitted" is exactly the reasoning
-that lets an unsourced number reach a headline.
+`action_lift.*` decides whether a retry outperforms a message; `reply_mix.*` and
+`debtor.disengage_after_contacts` drive the promise-kept rate and the
+opt-outs-induced count; `p_authorise.*` decides whether a retry beats a message
+at 03:00. "Structural, not fitted" is exactly the reasoning that lets an
+unsourced number reach a headline.
 
 Sections are load-bearing, not decoration. `scripts/gate.sh` runs GEN-4, which
-checks the **Generator and world parameters** section against
-`settle.sim.generator.PARAMS` in both directions: a parameter with no row fails
-the build, and so does a row with no parameter.
+checks the **Sampled parameters** table against `settle.sim.generator.PARAMS` in
+both directions: a sampled parameter with no row fails the build, and so does a
+row with no parameter.
 
 ## Generator and world parameters
 
 Source of truth: `settle/sim/generator.py`, the `PARAMS` dict. Read by the
-generator, by `settle/sim/world.py` (`action_lift.*`, `auth_no_settle_rate`) and
-by `settle/sim/debtors.py` (`reply_mix.*`).
+generator, by `settle/sim/world.py` (`action_lift.*`, `p_authorise.*`,
+`auth_no_settle_rate`) and by `settle/sim/debtors.py` (`reply_mix.*`,
+`debtor.*`, `patience.complaint_cost`).
+
+### Sampled parameters
+
+Read by the generator or world to draw a value.
 
 | parameter | value | source | date | sensitivity |
 |---|---|---|---|---|
@@ -66,7 +72,6 @@ by `settle/sim/debtors.py` (`reply_mix.*`).
 | observed_credit_day.known_rate | 0.31 | ASSERTED | 2026-08-27 | pending D4 |
 | observed_credit_day.exact_rate | 0.72 | ASSERTED | 2026-08-27 | pending D4 |
 | observed_credit_day.max_error_days | 3 | ASSERTED | 2026-08-27 | pending D4 |
-| escalation.target_overall_rate | 0.15 | ASSERTED | 2026-08-27 | pending D4 |
 | escalation.min_amount_paise | 74900 | ASSERTED | 2026-08-27 | pending D4 |
 | escalation.min_attempt_number | 2 | ASSERTED | 2026-08-27 | pending D4 |
 | intent_mix.willing_able | 0.33 | ASSERTED | 2026-08-27 | pending D4 |
@@ -124,6 +129,24 @@ by `settle/sim/debtors.py` (`reply_mix.*`).
 | reply_mix.pay_then_complain.complaint | 0.55 | ASSERTED | 2026-08-27 | pending D4 |
 | reply_mix.pay_then_complain.hedged | 0.25 | ASSERTED | 2026-08-27 | pending D4 |
 | reply_mix.pay_then_complain.silence | 0.2 | ASSERTED | 2026-08-27 | pending D4 |
+| debtor.disengage_after_contacts | 2 | ASSERTED | 2026-08-27 | pending D4 |
+| patience.complaint_cost | 2 | ASSERTED | 2026-08-27 | pending D4 |
+| p_authorise.base_floor | 0.5 | ASSERTED | 2026-08-27 | pending D4 |
+| p_authorise.switch_rail_same_rail_penalty | 0.5 | ASSERTED | 2026-08-27 | pending D4 |
+| p_authorise.retry_cross_rail_penalty | 0.9 | ASSERTED | 2026-08-27 | pending D4 |
+| p_authorise.dnd_contact_penalty | 0.6 | ASSERTED | 2026-08-27 | pending D4 |
+| p_authorise.day_window_start_hour | 9 | ASSERTED | 2026-08-27 | pending D4 |
+| p_authorise.day_window_end_hour | 20 | ASSERTED | 2026-08-27 | pending D4 |
+
+### Asserted targets
+
+Not sampled. Checked against a realised distribution by a test. Recorded here
+because they are numbers that appear in reported output, but nothing reads them
+to make a decision.
+
+| parameter | value | source | date | sensitivity |
+|---|---|---|---|---|
+| escalation.target_overall_rate | 0.15 | ASSERTED | 2026-08-27 | pending D4 |
 
 ## Observability parameters
 

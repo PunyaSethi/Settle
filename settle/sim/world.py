@@ -66,23 +66,27 @@ def p_authorise(case: ObservedCase, truth: HiddenTruth, action: Action, at: date
     payday_lift = params.get("payday_lift", 0.0)
     hour_lift = params.get("hour_lift", 0.0)
 
-    p = truth.true_recoverability * lift * (0.5 + base)
+    p = truth.true_recoverability * lift * (PARAMS["p_authorise.base_floor"] + base)
 
     # Liquidity window: money is there just after payday, not before it.
     if _days_to_payday(at, truth.payday_day) <= 1:
         p *= 1.0 + payday_lift
 
     # Daytime attempts clear more often than 03:00 ones.
-    if 9 <= at.hour <= 20:
+    if (
+        PARAMS["p_authorise.day_window_start_hour"]
+        <= at.hour
+        <= PARAMS["p_authorise.day_window_end_hour"]
+    ):
         p *= 1.0 + hour_lift
 
     # A rail switch only helps when the current instrument is the problem.
     if isinstance(action, SwitchRail) and action.to is case.rail:
-        p *= 0.5
+        p *= PARAMS["p_authorise.switch_rail_same_rail_penalty"]
     if isinstance(action, Retry) and action.rail is not case.rail:
-        p *= 0.9
+        p *= PARAMS["p_authorise.retry_cross_rail_penalty"]
     if isinstance(action, (SendMessage, VoiceCall)) and case.dnd_flag:
-        p *= 0.6
+        p *= PARAMS["p_authorise.dnd_contact_penalty"]
 
     return min(max(p, 0.0), 1.0)
 

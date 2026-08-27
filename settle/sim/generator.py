@@ -177,6 +177,30 @@ PARAMS: Final[dict[str, float]] = {
     "reply_mix.pay_then_complain.complaint": 0.55,
     "reply_mix.pay_then_complain.hedged": 0.25,
     "reply_mix.pay_then_complain.silence": 0.20,
+    # --- debtor disengagement and patience cost (§8) ---
+    # Both move the opt-outs-induced count, a §14.4 headline.
+    "debtor.disengage_after_contacts": 2.0,
+    "patience.complaint_cost": 2.0,
+    # --- p_authorise shape (§5.2, via world.p_authorise) ---
+    # The multipliers and the day window that decide whether a retry beats a
+    # message at 03:00. Changing any of them moves incremental recovery, so
+    # INV-10 applies (SPEC §15) — "structural, not fitted" is not a defence.
+    "p_authorise.base_floor": 0.5,
+    "p_authorise.switch_rail_same_rail_penalty": 0.5,
+    "p_authorise.retry_cross_rail_penalty": 0.9,
+    "p_authorise.dnd_contact_penalty": 0.6,
+    "p_authorise.day_window_start_hour": 9.0,
+    "p_authorise.day_window_end_hour": 20.0,
+}
+
+# Numbers that appear in reported output but that nothing reads to make a
+# decision. They are checked against a realised distribution by a test rather
+# than sampled from, and PRIORS.md records them under their own heading so the
+# distinction survives review (A50).
+ASSERTED_TARGETS: Final[frozenset[str]] = frozenset({"escalation.target_overall_rate"})
+
+SAMPLED_PARAMS: Final[dict[str, float]] = {
+    key: value for key, value in PARAMS.items() if key not in ASSERTED_TARGETS
 }
 
 # ---------------------------------------------------------------------------

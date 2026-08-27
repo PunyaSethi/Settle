@@ -577,6 +577,11 @@ every rupee in §14.4. "Structural, not fitted" is precisely the reasoning that
 lets an unsourced number reach a headline, and it is the criticism this project
 levels at comparable work. If a number can move a metric, it gets a row.
 
+Applied consistently, this rule caught `DISENGAGE_AFTER_CONTACTS`, the complaint
+probability, and five inline multipliers in `p_authorise` after the initial
+pass. The test for whether a number belongs in PARAMS is not whether it feels
+like a parameter — it is whether changing it would move a number in §14.4.
+
 **Nothing from any employer.** No code, no data, no figures learned on the job,
 not paraphrased. Every prior is public or asserted.
 
@@ -738,6 +743,7 @@ Resolved inside the checkpoint that reaches them, not by further spec amendment.
 | OQ-4 | With S4/S5 relaxed (§13.2) and S7 not applied, B3 terminates only on S3 or S6. Its violation count is then a function of the message budget constant rather than of debtor behaviour. Fix the budget a priori and report it as an input, or the headline "B3 generated N violations" is a tuning artefact. | D4 |
 | OQ-5 | A22's perturbed generator variant needs a named perturbation set — which parameters, shifted how far — fixed before the estimator is trained. Otherwise it is a check that can be quietly weakened until it passes. | D2 |
 | OQ-6 | Razorpay's default settlement cycle is publicly documented. `settlement_lag_h` should be a cited prior, not ASSERTED, and the recon-report availability lag should be folded into it. Cheap INV-10 win. | D4 |
+| OQ-20 | `settlement_lag_reporting` and `reversal_reporting_delay` are declared but unconsumed until the D3 reporting layer exists. GEN-4 cannot detect a dead parameter. Add a liveness check to the D3 checkpoint asserting every observability parameter is read by at least one code path. | D3 |
 
 Resolved:
 
@@ -814,3 +820,8 @@ Resolved:
 - 2026-08-27 — A45: §17 — the batch CLI is `python -m settle.sim.generator`; no `generate.py` shim.
 - 2026-08-27 — A46: §5.2 — `escalation_eligible` recorded as derivable from observables, never a channel. Test GEN-6.
 - 2026-08-27 — A47: §15 — INV-10 extended to every number that can move a metric; `ACTION_LIFT` and `_REPLY_MIX` moved into PARAMS with PRIORS rows.
+- 2026-08-27 — A48: `debtor.disengage_after_contacts` and `patience.complaint_cost` moved into PARAMS. Resolves OQ-18.
+- 2026-08-27 — A49: `p_authorise.*` — six literals (base floor, same-rail switch, cross-rail retry, DND, day-window start and end) moved into PARAMS. Resolves OQ-19.
+- 2026-08-27 — A50: PRIORS.md split into **Sampled parameters** and **Asserted targets**; `escalation.target_overall_rate` moved to the second. Resolves OQ-21.
+- 2026-08-27 — A51: §21 — OQ-20 recorded, to be resolved by a D3 liveness check.
+- 2026-08-27 — A52: §15 — records what the INV-10 rule caught on the second pass, and the test for whether a number belongs in PARAMS.

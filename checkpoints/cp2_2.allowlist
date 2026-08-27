@@ -1,0 +1,10 @@
+# CP2.2 — INV-10 completion. Eight literals that move headline metrics moved
+# into PARAMS; PRIORS split into sampled parameters and asserted targets.
+
+SPEC.md
+PRIORS.md
+settle/sim/generator.py
+settle/sim/world.py
+settle/sim/debtors.py
+tests/test_generator.py
+checkpoints/cp2_2.allowlist

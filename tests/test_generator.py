@@ -18,7 +18,9 @@ import pytest
 from settle.schema.canonical import canonical_json
 from settle.schema.enums import DeclineClass, MandateState
 from settle.sim.generator import (
+    ASSERTED_TARGETS,
     PARAMS,
+    SAMPLED_PARAMS,
     UNMAPPED_CODES,
     generate_batch,
     generate_case,
@@ -310,9 +312,17 @@ def test_GEN_3_reporting_defaults_are_all_non_zero_and_zeroable():
 # GEN-4 — PARAMS <-> PRIORS.md
 # --------------------------------------------------------------------------
 
-def _priors_section(title: str) -> dict[str, str]:
+def _priors_table(heading: str) -> dict[str, str]:
+    """Rows of the table under an exact heading line, up to the next heading.
+
+    Keyed on the full heading including its `#`s, because A50 put two tables
+    inside one section and a level-agnostic parser would merge them — which is
+    exactly the distinction the split exists to keep.
+    """
     text = (REPO_ROOT / "PRIORS.md").read_text(encoding="utf-8")
-    body = text.split(f"## {title}", 1)[1].split("\n## ", 1)[0]
+    assert text.count(heading + "\n") == 1, f"heading not unique: {heading}"
+    body = text.split(heading + "\n", 1)[1]
+    body = body.split("\n#", 1)[0]
     rows = {}
     for line in body.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
@@ -321,21 +331,36 @@ def _priors_section(title: str) -> dict[str, str]:
     return rows
 
 
-def test_GEN_4_every_param_has_a_priors_row():
-    rows = _priors_section("Generator and world parameters")
-    missing = sorted(set(PARAMS) - set(rows))
-    assert not missing, f"PARAMS with no PRIORS.md row — INV-10 breach: {missing}"
+def test_GEN_4_every_sampled_param_has_a_row_and_nothing_else_does():
+    """A50's split, enforced in both directions.
+
+    The sampled table must be exactly the parameters something reads to draw a
+    value — no more, no less. An asserted target listed here would look like it
+    drives behaviour when nothing consumes it.
+    """
+    rows = _priors_table("### Sampled parameters")
+    assert sorted(rows) == sorted(SAMPLED_PARAMS), {
+        "missing": sorted(set(SAMPLED_PARAMS) - set(rows)),
+        "orphans": sorted(set(rows) - set(SAMPLED_PARAMS)),
+    }
 
 
-def test_GEN_4_every_priors_row_has_a_param():
-    rows = _priors_section("Generator and world parameters")
-    orphans = sorted(set(rows) - set(PARAMS))
-    assert not orphans, f"PRIORS.md rows with no PARAMS entry: {orphans}"
+def test_GEN_4_asserted_targets_have_their_own_table():
+    rows = _priors_table("### Asserted targets")
+    assert set(rows) == set(ASSERTED_TARGETS)
+    assert not (set(rows) & set(SAMPLED_PARAMS)), "a target is listed as sampled too"
+    for key in ASSERTED_TARGETS:
+        assert float(rows[key]) == PARAMS[key]
+
+
+def test_GEN_4_sampled_and_targets_together_are_the_whole_params_dict():
+    assert set(SAMPLED_PARAMS) | set(ASSERTED_TARGETS) == set(PARAMS)
+    assert not (set(SAMPLED_PARAMS) & set(ASSERTED_TARGETS))
 
 
 def test_GEN_4_recorded_values_match_the_code():
-    rows = _priors_section("Generator and world parameters")
-    drifted = {k: (PARAMS[k], rows[k]) for k in PARAMS if float(rows[k]) != PARAMS[k]}
+    rows = _priors_table("### Sampled parameters")
+    drifted = {k: (SAMPLED_PARAMS[k], rows[k]) for k in SAMPLED_PARAMS if float(rows[k]) != SAMPLED_PARAMS[k]}
     assert not drifted, f"PRIORS.md disagrees with PARAMS: {drifted}"
 
 
@@ -348,7 +373,7 @@ def test_GEN_4_every_prior_is_sourced_or_marked_asserted():
 
 
 def test_GEN_4_observability_defaults_are_recorded_too():
-    rows = _priors_section("Observability parameters")
+    rows = _priors_table("## Observability parameters")
     assert set(rows) == set(OBSERVABILITY_DEFAULTS)
     for key, value in OBSERVABILITY_DEFAULTS.items():
         assert float(rows[key]) == value
@@ -550,3 +575,29 @@ def test_GEN_7_SF1_is_still_producible_under_perfect_observability(batch):
         "SF-1 is unproducible: every authorisation settled, so the reporting "
         "flag has reached into the world"
     )
+
+
+def test_GEN_4_the_relocated_literals_are_read_not_merely_declared():
+    """A48 and A49 moved eight numbers out of code and into PARAMS.
+
+    A parameter nobody reads is worse than a literal: it carries a PRIORS row
+    that implies it matters. These are the ones the second INV-10 pass caught,
+    so each one is checked against the module that consumes it.
+    """
+    from settle.sim.debtors import COMPLAINT_PATIENCE_COST, DISENGAGE_AFTER_CONTACTS
+    from settle.sim.world import ACTION_LIFT
+
+    assert DISENGAGE_AFTER_CONTACTS == int(PARAMS["debtor.disengage_after_contacts"])
+    assert COMPLAINT_PATIENCE_COST == int(PARAMS["patience.complaint_cost"])
+    assert ACTION_LIFT  # built from action_lift.* at import
+
+    world_source = (SIM_DIR / "world.py").read_text(encoding="utf-8")
+    for key in (
+        "p_authorise.base_floor",
+        "p_authorise.switch_rail_same_rail_penalty",
+        "p_authorise.retry_cross_rail_penalty",
+        "p_authorise.dnd_contact_penalty",
+        "p_authorise.day_window_start_hour",
+        "p_authorise.day_window_end_hour",
+    ):
+        assert f'PARAMS["{key}"]' in world_source, f"{key} has a PRIORS row but nothing reads it"
