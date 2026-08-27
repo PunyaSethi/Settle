@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# local working context, not deliverables — see the scratchpad backups
+CLAUDE.md
+DECISIONS.md
+
 # python
 __pycache__/
 *.pyc
