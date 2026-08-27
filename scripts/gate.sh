@@ -97,6 +97,8 @@ for f in "${FROZEN[@]}"; do
   elif git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
     if git diff --quiet "$BASELINE" -- "$f"; then
       pass "$f unchanged since $BASELINE"
+    elif allowed "$f"; then
+      pass "$f changed, and this checkpoint's allowlist authorises it"
     else
       fail "$f — frozen file modified. Stop and ask before changing it."
     fi

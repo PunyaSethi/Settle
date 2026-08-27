@@ -37,6 +37,8 @@ class ObservedCase(BaseModel):
     prior_failures: int = Field(ge=0)
     prior_recoveries: int = Field(ge=0)
     plan_value_paise: int = Field(ge=0)
+    # 1..28, the same domain as HiddenTruth.payday_day: this field is an
+    # estimate of that one, so it cannot have a wider domain (SPEC §5.1, A39).
     observed_credit_day: int | None = Field(default=None, ge=1, le=28)
     consent_whatsapp: bool
     dnd_flag: bool

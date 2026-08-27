@@ -17,7 +17,8 @@ project.
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-from settle.schema.enums import IntentType
+from settle.schema.enums import DebtorBehaviour, DeclineClass, IntentType
+from settle.schema.observed import ObservedCase
 
 TRUTH_CONFIG = ConfigDict(strict=True, extra="forbid", frozen=True)
 
@@ -61,3 +62,27 @@ class ActualOutcome(BaseModel):
     settled_at: AwareDatetime | None = None
     reversed: bool = False
     amount_paise: int | None = Field(default=None, ge=0)
+
+
+class GeneratedCase(BaseModel):
+    """One case as the generator produced it.
+
+    The container is sim-only on purpose. `observed` is the half the agent is
+    handed; everything beside it is the half it must never see, and keeping
+    them in one object here is what lets reconciliation compare the two later
+    without either side reaching across.
+
+    `escalation_eligible` is the odd one out: it is *derivable* from
+    `observed` by the rule in `generator.PARAMS` (real value on the line, per
+    SPEC §2), so recording it is a convenience for reporting the realised mix,
+    not a channel. `behaviour` and `decline_class` are not derivable and must
+    not leak — `behaviour` in particular drives replies and patience (§8).
+    """
+
+    model_config = TRUTH_CONFIG
+
+    observed: ObservedCase
+    truth: HiddenTruth
+    behaviour: DebtorBehaviour
+    decline_class: DeclineClass
+    escalation_eligible: bool

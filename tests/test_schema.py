@@ -468,3 +468,38 @@ def test_SCH_8_a_legal_alternative_needs_no_gate_and_defaults_to_none():
     assert canonical_json(alt) == canonical_json(
         Alternative(action=DoNothing(), p_success=0.19, ev_paise=0, legal=True, block_gate=None)
     )
+
+
+# --------------------------------------------------------------------------
+# SCH-9
+# --------------------------------------------------------------------------
+
+def test_SCH_9_illegal_alternative_must_name_the_gate():
+    with pytest.raises(ValidationError):
+        Alternative(action=VoiceCall(), p_success=0.4, ev_paise=-400, legal=False)
+    with pytest.raises(ValidationError):
+        Alternative(
+            action=VoiceCall(), p_success=0.4, ev_paise=-400, legal=False, block_gate=None
+        )
+
+
+def test_SCH_9_legal_alternative_must_not_name_a_gate():
+    with pytest.raises(ValidationError):
+        Alternative(action=DoNothing(), p_success=0.1, ev_paise=0, legal=True, block_gate="G2")
+
+
+def test_SCH_9_the_pairing_is_enforced_on_json_input_too():
+    ok = Alternative(action=DoNothing(), p_success=0.1, ev_paise=0, legal=True)
+    assert Alternative.model_validate_json(ok.model_dump_json()) == ok
+    with pytest.raises(ValidationError):
+        Alternative.model_validate_json(
+            json.dumps(
+                {
+                    "action": {"type": "do_nothing"},
+                    "p_success": 0.1,
+                    "ev_paise": 0,
+                    "legal": False,
+                    "block_gate": None,
+                }
+            )
+        )

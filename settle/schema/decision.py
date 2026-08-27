@@ -5,7 +5,7 @@ auditable rather than merely logged: a reviewer can see what the policy
 considered and declined, not just what it did.
 """
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from settle.schema.action import Action
 from settle.schema.enums import ArmMode, ChosenBy
@@ -29,6 +29,20 @@ class Alternative(BaseModel):
     ev_paise: int
     legal: bool
     block_gate: str | None = None
+
+    @model_validator(mode="after")
+    def _block_gate_matches_legal(self) -> "Alternative":
+        """`block_gate` names the gate, and only when there was one.
+
+        SPEC §5.4 states the pairing; enforcing it here is what stops an
+        illegal alternative reaching the audit log with no reason attached,
+        which would be indistinguishable from an economic rejection.
+        """
+        if self.legal and self.block_gate is not None:
+            raise ValueError("a legal alternative was not blocked, so block_gate must be null")
+        if not self.legal and self.block_gate is None:
+            raise ValueError("an illegal alternative must name the gate that blocked it")
+        return self
 
 
 class Decision(BaseModel):

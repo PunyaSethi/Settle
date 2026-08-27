@@ -97,7 +97,7 @@ tenure_months      int >= 0
 prior_failures     int >= 0
 prior_recoveries   int >= 0
 plan_value_paise   int
-observed_credit_day int | null   # inferred salary day, often null
+observed_credit_day int | null   # 1..28; inferred salary day, often null
 consent_whatsapp   bool
 dnd_flag           bool
 language           enum          en | hi | hinglish
@@ -116,6 +116,14 @@ will_settle         bool         # if authorised, does it actually settle
 settlement_lag_h    int
 will_reverse        bool
 ```
+
+`escalation_eligible` is not hidden truth and is not a field of either model. It
+is derivable from `ObservedCase` alone by the `escalation.*` rule in PARAMS
+(§2's high-value slice), and the generator records it on the sim-side container
+purely so the realised mix can be reported. Any policy that needs it MUST
+recompute it from observables. Test GEN-6 asserts the recomputation matches the
+recorded flag for every case in the batch — if it ever stops matching, the flag
+has become a channel.
 
 ### 5.3 Action — closed verb set
 
@@ -224,12 +232,23 @@ outcome the agent learns about passes through it.
 | `webhook_drop_rate` | Outcome never reported. Agent keeps chasing a paid customer. |
 | `webhook_duplicate_rate` | Outcome reported 2+ times. Tests INV-4. |
 | `out_of_order_rate` | Events arrive in the wrong sequence |
-| `settlement_lag_h` | Gap between "captured" and money actually settling |
-| `auth_no_settle_rate` | Reported captured, never settles |
-| `reversal_rate` | Settles, then reverses days later |
+| `settlement_lag_reporting` | Delay between money settling and the settlement being reported |
+| `reversal_reporting_delay` | Delay between a reversal happening and it being reported |
 
-All six default to non-zero. A run with all six at zero is available as
+All five default to non-zero. A run with all five at zero is available as
 `--perfect-observability` and exists only to quantify what the layer costs.
+
+`auth_no_settle_rate` is deliberately NOT an observability parameter. Whether an
+authorised payment actually settles is a fact about the bank, not about our
+reporting layer. Placing it here would mean `--perfect-observability` zeroes it,
+making authorisation equivalent to settlement and silently abolishing SF-1 — a
+real-world failure class, not a reporting artefact. It lives in world PARAMS.
+
+`--perfect-observability` zeroes only the five reporting-layer parameters:
+`webhook_drop_rate`, `webhook_duplicate_rate`, `out_of_order_rate`,
+`settlement_lag_reporting`, `reversal_reporting_delay`. The world still fails to
+settle, still reverses, still lags. The flag measures what unreliable reporting
+costs, not what a perfect world would pay.
 
 ## 7. Silent failure taxonomy — DIFFERENTIATOR
 
@@ -551,6 +570,13 @@ A sensitivity sweep varies each parameter across a plausible range and reports
 whether the headline conclusion survives. Parameters where it does not are named
 explicitly.
 
+INV-10 covers every number that can move a reported metric, including those
+that describe the shape of the action space or of a behaviour. `ACTION_LIFT`
+determines whether a retry outperforms a message and is therefore upstream of
+every rupee in §14.4. "Structural, not fitted" is precisely the reasoning that
+lets an unsourced number reach a headline, and it is the criticism this project
+levels at comparable work. If a number can move a metric, it gets a row.
+
 **Nothing from any employer.** No code, no data, no figures learned on the job,
 not paraphrased. Every prior is public or asserted.
 
@@ -582,7 +608,8 @@ Credentials in `.env` only. `.env` in `.gitignore` from commit one.
 settle/
   schema/          frozen contracts
   sim/
-    generator.py   world construction
+    streams.py     indexed random streams, addressed by (case_id, name, tick)
+    generator.py   world construction; also the batch CLI
     truth.py       HiddenTruth — agent package must never import this
     world.py       response model
     observability.py
@@ -620,6 +647,8 @@ viewer/
   index.html     single file, vanilla JS, no build step
 scripts/
   gate.sh
+checkpoints/
+  *.allowlist    one per checkpoint, consumed by scripts/gate.sh
 tests/
 fixtures/
 out/
@@ -628,6 +657,11 @@ SPEC.md
 PLAN.md
 README.md
 ```
+
+The batch CLI is `python -m settle.sim.generator --cases 10000 --seed 42 --out
+out/batch.jsonl`. It lives in `generator.py`; there is no `settle/sim/generate.py`
+shim. Observed cases and hidden truth are written to separate files — one file
+holding both would be an INV-8 breach waiting for the first person who greps it.
 
 Stack: Python, FastAPI (one route), SQLite via SQLAlchemy with `DATABASE_URL`
 override, matplotlib, sklearn, pytest. Audit ledger is JSONL on disk, not in the
@@ -700,12 +734,10 @@ Resolved inside the checkpoint that reaches them, not by further spec amendment.
 
 | ID | Question | Checkpoint |
 |---|---|---|
-| OQ-1 | §20's table has no `P(opt_out \| action)` column, so the quantity A26 makes load-bearing is stated nowhere. Needs a column in §20 and a row per action in PRIORS.md, or INV-10 catches it at scoring time. | D4 |
 | OQ-3 | EXPLORE draws uniformly over legal pairs, but after G9 most `enach` retry hours are illegal without an active notice. Uniform-over-legal therefore under-samples `enach` retries — exactly the cell where §9's rail-interaction constraint is decided. May need stratification or a longer EXPLORE run on that rail. | D2 |
 | OQ-4 | With S4/S5 relaxed (§13.2) and S7 not applied, B3 terminates only on S3 or S6. Its violation count is then a function of the message budget constant rather than of debtor behaviour. Fix the budget a priori and report it as an input, or the headline "B3 generated N violations" is a tuning artefact. | D4 |
 | OQ-5 | A22's perturbed generator variant needs a named perturbation set — which parameters, shifted how far — fixed before the estimator is trained. Otherwise it is a check that can be quietly weakened until it passes. | D2 |
 | OQ-6 | Razorpay's default settlement cycle is publicly documented. `settlement_lag_h` should be a cited prior, not ASSERTED, and the recon-report availability lag should be folded into it. Cheap INV-10 win. | D4 |
-| OQ-11 | `scripts/gate.sh` cannot verify the frozen files while nothing is committed — `git diff` has no baseline to compare against, so the check degrades to a warning. Resolved the moment the first commit lands. | CP1.1 |
 
 Resolved:
 
@@ -723,6 +755,12 @@ Resolved:
 - OQ-12 — bounds on `attempt_number`, `payday_day`, `arrival_count`,
   `tenure_months`, `prior_failures`, `prior_recoveries` and `propensity` were
   interpretation. Resolved by A37: recorded in §5.1, §5.2, §5.4 and §5.5.
+- OQ-1 — `P(opt_out | action)` was stated nowhere. Resolved by A36, which
+  rebuilt the §20 table around it on the `(ActionType, Channel|null)` key space,
+  with matching `p_opt_out_*` rows in PRIORS.md.
+- OQ-11 — the frozen-file check could not run without a baseline. Resolved at
+  commit `938b54b`: `scripts/gate.sh` now reports SPEC.md, DECISIONS.md and
+  PRIORS.md as verified rather than unverifiable.
 
 ## Amendments
 
@@ -767,3 +805,12 @@ Resolved:
 - 2026-08-27 — A36: §20 cost table rekeyed on `(ActionType, Channel|null)`; PRIORS `p_opt_out_*` rows follow the same key space. Resolves OQ-8.
 - 2026-08-27 — A37: §5.1, §5.2, §5.4, §5.5 record the field bounds explicitly rather than leaving them to the implementation. Resolves OQ-12.
 - 2026-08-27 — A38: §21 — OQ-11 opened, OQ-7/8/9/10/12 resolved.
+- 2026-08-27 — A39: §5.1 `observed_credit_day` bounded to 1..28, the same domain as `payday_day` it estimates.
+- 2026-08-27 — A40: §21 — OQ-1 and OQ-11 resolved.
+- 2026-08-27 — A41: `Alternative` now enforces the `legal` / `block_gate` pairing stated in §5.4. Test SCH-9.
+- 2026-08-27 — A42: CP0-CP1 commit message corrected from 33 to 41 tests.
+- 2026-08-27 — A43: §6 — `auth_no_settle_rate` removed from the observability layer and moved to world PARAMS; `settlement_lag_h` and `reversal_rate` restated as the reporting-side `settlement_lag_reporting` and `reversal_reporting_delay`. `--perfect-observability` now zeroes five parameters, not six.
+- 2026-08-27 — A44: §17 — `settle/sim/streams.py` and `checkpoints/` recorded in the repo layout.
+- 2026-08-27 — A45: §17 — the batch CLI is `python -m settle.sim.generator`; no `generate.py` shim.
+- 2026-08-27 — A46: §5.2 — `escalation_eligible` recorded as derivable from observables, never a channel. Test GEN-6.
+- 2026-08-27 — A47: §15 — INV-10 extended to every number that can move a metric; `ACTION_LIFT` and `_REPLY_MIX` moved into PARAMS with PRIORS rows.

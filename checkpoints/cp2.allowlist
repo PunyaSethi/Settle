@@ -1,0 +1,20 @@
+# CP2 — the batch generator: 10,000 cases, seed-stable, indexed random streams.
+# Baseline is the CP0-CP1 commit, so this lists only CP2's own files.
+
+# --- Part A, carry-forward fixes (A39-A42) --------------------------------
+SPEC.md
+settle/schema/observed.py
+settle/schema/decision.py
+tests/test_schema.py
+
+# --- Part B, the generator ------------------------------------------------
+PRIORS.md
+settle/sim/streams.py
+settle/sim/generator.py
+settle/sim/truth.py
+settle/sim/world.py
+settle/sim/observability.py
+settle/sim/debtors.py
+tests/test_generator.py
+tests/test_streams.py
+checkpoints/cp2.allowlist

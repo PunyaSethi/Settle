@@ -1,0 +1,25 @@
+# CP2.1 — gate fix, observability seam correction, PARAMS completion.
+# Baseline is the CP0-CP1 commit, so this covers CP2 and CP2.1 together: CP2
+# was never committed, and the two land as one commit.
+
+# --- CP2 Part A, carry-forward fixes (A39-A42) ----------------------------
+SPEC.md
+settle/schema/observed.py
+settle/schema/decision.py
+tests/test_schema.py
+
+# --- CP2, the generator ---------------------------------------------------
+PRIORS.md
+settle/sim/streams.py
+settle/sim/generator.py
+settle/sim/truth.py
+settle/sim/world.py
+settle/sim/observability.py
+settle/sim/debtors.py
+tests/test_generator.py
+tests/test_streams.py
+checkpoints/cp2.allowlist
+
+# --- CP2.1 ----------------------------------------------------------------
+scripts/gate.sh
+checkpoints/cp2_1.allowlist
