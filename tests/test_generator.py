@@ -599,5 +599,6 @@ def test_GEN_4_the_relocated_literals_are_read_not_merely_declared():
         "p_authorise.dnd_contact_penalty",
         "p_authorise.day_window_start_hour",
         "p_authorise.day_window_end_hour",
+        "world.liquidity_window_days",
     ):
         assert f'PARAMS["{key}"]' in world_source, f"{key} has a PRIORS row but nothing reads it"

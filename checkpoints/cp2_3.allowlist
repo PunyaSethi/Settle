@@ -1,0 +1,8 @@
+# CP2.3 — the last INV-10 literal: the payday liquidity window width.
+
+SPEC.md
+PRIORS.md
+settle/sim/world.py
+settle/sim/generator.py
+tests/test_generator.py
+checkpoints/cp2_3.allowlist

@@ -69,7 +69,7 @@ def p_authorise(case: ObservedCase, truth: HiddenTruth, action: Action, at: date
     p = truth.true_recoverability * lift * (PARAMS["p_authorise.base_floor"] + base)
 
     # Liquidity window: money is there just after payday, not before it.
-    if _days_to_payday(at, truth.payday_day) <= 1:
+    if _days_to_payday(at, truth.payday_day) <= PARAMS["world.liquidity_window_days"]:
         p *= 1.0 + payday_lift
 
     # Daytime attempts clear more often than 03:00 ones.

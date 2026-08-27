@@ -191,6 +191,12 @@ PARAMS: Final[dict[str, float]] = {
     "p_authorise.dnd_contact_penalty": 0.6,
     "p_authorise.day_window_start_hour": 9.0,
     "p_authorise.day_window_end_hour": 20.0,
+    # --- liquidity window (§9 time_shiftable) ---
+    # How many days before payday still counts as "money is about to be there".
+    # The highest-leverage number in the world model: it decides how often a
+    # time_shiftable retry lands inside the window, which is the mechanism the
+    # whole retry-timing result rests on. Required member of the D4 sweep.
+    "world.liquidity_window_days": 1.0,
 }
 
 # Numbers that appear in reported output but that nothing reads to make a

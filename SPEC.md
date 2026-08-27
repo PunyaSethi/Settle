@@ -568,7 +568,8 @@ in the run output.
 
 A sensitivity sweep varies each parameter across a plausible range and reports
 whether the headline conclusion survives. Parameters where it does not are named
-explicitly.
+explicitly. `world.liquidity_window_days` is named as a required member of the
+sensitivity sweep, not left to discretion.
 
 INV-10 covers every number that can move a reported metric, including those
 that describe the shape of the action space or of a behaviour. `ACTION_LIFT`
@@ -825,3 +826,5 @@ Resolved:
 - 2026-08-27 — A50: PRIORS.md split into **Sampled parameters** and **Asserted targets**; `escalation.target_overall_rate` moved to the second. Resolves OQ-21.
 - 2026-08-27 — A51: §21 — OQ-20 recorded, to be resolved by a D3 liveness check.
 - 2026-08-27 — A52: §15 — records what the INV-10 rule caught on the second pass, and the test for whether a number belongs in PARAMS.
+- 2026-08-27 — A53: `world.liquidity_window_days` moved into PARAMS — the last INV-10 literal, and the highest-leverage number in the world model.
+- 2026-08-27 — A54: §15 — `world.liquidity_window_days` named as a required member of the D4 sensitivity sweep.
