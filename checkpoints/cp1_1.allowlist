@@ -1,0 +1,35 @@
+# CP1.1 — ratifications (A33-A38), serve_notice, Alternative, first commit.
+
+SPEC.md
+PRIORS.md
+settle/schema/enums.py
+settle/schema/action.py
+settle/schema/decision.py
+tests/test_schema.py
+checkpoints/cp0.allowlist
+checkpoints/cp1.allowlist
+checkpoints/cp1_1.allowlist
+
+# --- carried forward ------------------------------------------------------
+# The gate's baseline is $SETTLE_GATE_BASELINE, default HEAD. Until the first
+# commit lands, HEAD predates the whole project, so every earlier checkpoint's
+# files still read as "changed". Once CP1.1 is committed, later allowlists list
+# only their own checkpoint's files and this block is unnecessary.
+
+PLAN.md
+README.md
+DECISIONS.md
+CLAUDE.md
+.gitignore
+.gitattributes
+.env.example
+requirements.txt
+settle/__init__.py
+settle/schema/__init__.py
+settle/schema/observed.py
+settle/schema/outcome.py
+settle/schema/ledger.py
+settle/schema/canonical.py
+settle/sim/__init__.py
+settle/sim/truth.py
+scripts/gate.sh

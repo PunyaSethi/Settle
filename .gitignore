@@ -1,0 +1,21 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# run artefacts
+out/*
+!out/charts/
+
+# tooling
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store

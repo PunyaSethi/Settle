@@ -1,0 +1,16 @@
+# CP1 — schema freeze. Every frozen contract in SPEC §5 as a Pydantic model.
+# No behaviour, no generator. Shapes only.
+
+settle/__init__.py
+settle/schema/__init__.py
+settle/schema/enums.py
+settle/schema/observed.py
+settle/schema/action.py
+settle/schema/decision.py
+settle/schema/outcome.py
+settle/schema/ledger.py
+settle/schema/canonical.py
+settle/sim/__init__.py
+settle/sim/truth.py
+tests/test_schema.py
+scripts/gate.sh

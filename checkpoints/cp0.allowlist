@@ -1,0 +1,19 @@
+# CP0 — repo bootstrap and spec freeze.
+# Covers CP0, CP0.1 (spec amendments A8-A21) and CP0.2 (A22-A32, DECISIONS.md).
+#
+# Format, as consumed by scripts/gate.sh:
+#   - one path per line
+#   - a trailing "/" makes the entry a directory prefix
+#   - anything else is an exact path
+#   - blank lines and #-comments are ignored
+
+SPEC.md
+PLAN.md
+PRIORS.md
+README.md
+DECISIONS.md
+CLAUDE.md
+.gitignore
+.gitattributes
+.env.example
+requirements.txt
