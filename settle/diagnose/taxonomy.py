@@ -31,17 +31,9 @@ CODE_TO_CLASS: Final[dict[str, DeclineClass]] = {
 # Forbidden column is commentary explaining why an omission is deliberate, not a
 # subtractive blacklist. Any verb absent from Viable is not available.
 #
-# `serve_notice` is viable for `time_shiftable` and `transient` because on
-# `enach` it is required before a debit outside an active notice window (A34,
-# G9). Without it those classes have no compliant path to the action §9 calls
-# their best one.
-VIABLE_ACTIONS: Final[dict[DeclineClass, frozenset[ActionType]]] = {
-    DeclineClass.TIME_SHIFTABLE: frozenset(
-        {ActionType.DO_NOTHING, ActionType.RETRY, ActionType.SERVE_NOTICE}
-    ),
-    DeclineClass.TRANSIENT: frozenset(
-        {ActionType.DO_NOTHING, ActionType.RETRY, ActionType.SERVE_NOTICE}
-    ),
+_BASE_VIABLE: Final[dict[DeclineClass, frozenset[ActionType]]] = {
+    DeclineClass.TIME_SHIFTABLE: frozenset({ActionType.DO_NOTHING, ActionType.RETRY}),
+    DeclineClass.TRANSIENT: frozenset({ActionType.DO_NOTHING, ActionType.RETRY}),
     DeclineClass.DEAD_INSTRUMENT: frozenset(
         {ActionType.DO_NOTHING, ActionType.REQUEST_MANDATE_UPDATE, ActionType.SEND_MESSAGE}
     ),
@@ -52,6 +44,24 @@ VIABLE_ACTIONS: Final[dict[DeclineClass, frozenset[ActionType]]] = {
         {ActionType.DO_NOTHING, ActionType.RETRY, ActionType.SEND_MESSAGE}
     ),
     DeclineClass.TERMINAL: frozenset({ActionType.DO_NOTHING, ActionType.ESCALATE_HUMAN}),
+}
+
+# A66 — derived, not listed. On `enach` a debit outside an active notice window
+# is blocked by G9, and `serve_notice` is the only action that opens one. A
+# class that may retry but may not serve notice is unreachable on `enach` by
+# construction, which is exactly what happened to `ambiguous` when A57 named two
+# classes and missed the third.
+#
+#     SERVE_NOTICE is viable for class C  <=>  RETRY is viable for class C
+#
+# Stated as a rule so it cannot drift again when a class is added.
+VIABLE_ACTIONS: Final[dict[DeclineClass, frozenset[ActionType]]] = {
+    decline_class: (
+        actions | {ActionType.SERVE_NOTICE}
+        if ActionType.RETRY in actions
+        else actions
+    )
+    for decline_class, actions in _BASE_VIABLE.items()
 }
 
 # SPEC §9, the Forbidden column, restricted to what is expressible as an action
@@ -83,7 +93,7 @@ FORBIDDEN_ACTIONS: Final[dict[DeclineClass, frozenset[ActionType]]] = {
         {ActionType.RETRY, ActionType.REQUEST_MANDATE_UPDATE, ActionType.SERVE_NOTICE}
     ),
     DeclineClass.AMBIGUOUS: frozenset(
-        {ActionType.REQUEST_MANDATE_UPDATE, ActionType.SWITCH_RAIL, ActionType.SERVE_NOTICE}
+        {ActionType.REQUEST_MANDATE_UPDATE, ActionType.SWITCH_RAIL}
     ),
     DeclineClass.TERMINAL: frozenset(
         {

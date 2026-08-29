@@ -286,8 +286,11 @@ def gate_g10(case: ObservedCase, state: CaseState, action: Action) -> GateVerdic
     this gate it was unenforced — `ambiguous` retries ran until G4 or S3 fired,
     which is a different rule than the one §9 states.
 
-    Retries only. A rail switch is not a retry, and capping it here would forbid
-    the action §9 calls viable for `auth_abandoned`.
+    Retries only, and it reads `attempts_used`, which counts retries only (A67).
+    `rail_switches_used` is a separate counter: a switch is a change of
+    instrument, and spending a class retry budget on one would make
+    `switch_rail` unusable for `auth_abandoned`, the class whose recovery path
+    it is.
     """
     if action.type is not ActionType.RETRY:
         return GateVerdict(True, "G10", "G10_NOT_A_RETRY")

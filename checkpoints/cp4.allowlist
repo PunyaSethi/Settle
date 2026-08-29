@@ -1,0 +1,27 @@
+# CP4 — carry-forward (A66, A67), then the case runner and the audit ledger.
+
+SPEC.md
+PRIORS.md
+settle/policy/legal.py
+settle/policy/gates.py
+settle/schema/state.py
+settle/audit/__init__.py
+settle/audit/chain.py
+settle/audit/verify.py
+settle/execute/__init__.py
+settle/execute/executor.py
+settle/runner/__init__.py
+settle/runner/case_runner.py
+settle/runner/arm.py
+tests/test_gates.py
+tests/test_ledger.py
+tests/test_runner.py
+checkpoints/cp4.allowlist
+
+# --- outside the stated allowlist, both necessary and both flagged ---------
+# A66 requires serve_notice to be derived from the presence of a viable retry.
+# VIABLE_ACTIONS and FORBIDDEN_ACTIONS both live here, and `ambiguous` listed
+# serve_notice as forbidden, so the amendment is unsatisfiable without this file.
+settle/diagnose/taxonomy.py
+# The CLI is specified as `python -m settle.runner.run`, which needs run.py.
+settle/runner/run.py

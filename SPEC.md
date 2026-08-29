@@ -247,7 +247,8 @@ CaseState
   status             enum  open | stopped
   stop_reason        str | null
   stop_class         StopClass | null
-  attempts_used      int
+  attempts_used      int                 # retries only; read by G4 and G10
+  rail_switches_used int                 # a switch is a change of instrument
   contacts_used      int
   contact_history    list[datetime]      # for G2's rolling window
   last_contact_at    datetime | null
@@ -267,6 +268,11 @@ mutable list is only half frozen, and a `set`'s iteration order varies with
 `PYTHONHASHSEED` — two processes would serialise the same state differently and
 GEN-1 would stop holding. `contact_history` is a `tuple`; `dispatched_keys` is a
 `frozenset` serialised sorted.
+
+A rail switch is a change of instrument, not a retry. Counting it against a
+class retry budget makes `switch_rail` unusable for `auth_abandoned`, the one
+class whose recovery path it is. `attempts_used` and `rail_switches_used` are
+therefore separate, and G10 reads only the first.
 
 S1 reads `settled`. It is a recorded field rather than an argument to
 `check_stops` because a caller-supplied bool is inference by another name, and
@@ -375,10 +381,14 @@ The Viable column is authoritative and exhaustive. The Forbidden column is
 commentary explaining why an omission is deliberate; it is not a subtractive
 blacklist. Any verb absent from Viable is not available to that class.
 
-`serve_notice` is viable for `time_shiftable` and `transient` because on `enach`
-it is required before a debit outside an active notice window (A34, G9). Without
-it those classes would have no compliant path to the action this table calls
-their best one.
+`serve_notice` is viable for **every class with a viable retry**, derived rather
+than listed. On `enach` a debit outside an active notice window is blocked by G9,
+and `serve_notice` is the only action that opens one. A class that may retry but
+may not serve notice is unreachable on `enach` by construction — which is what
+happened to `ambiguous` when A57 named two classes and missed the third. Stated
+as a derivation so it cannot drift again:
+
+    SERVE_NOTICE is viable for class C  <=>  RETRY is viable for class C
 
 **Escalation-eligible cases** (§2.1) additionally gain `voice_call` and
 `escalate_human` for `dead_instrument`, `auth_abandoned` and `ambiguous`.
@@ -827,6 +837,11 @@ Resolved inside the checkpoint that reaches them, not by further spec amendment.
 
 Resolved:
 
+- OQ-22 — `ambiguous` had a viable retry and no way to open a notice window, so
+  it was unreachable on `enach`. Resolved by A66: `serve_notice` is derived from
+  the presence of a viable retry rather than listed per class.
+- OQ-23 — G10 counted rail switches against a class retry budget. Resolved by
+  A67: `rail_switches_used` is a separate counter and G10 reads `attempts_used`.
 - OQ-2 — common random numbers must span the 60-day observation horizon, not the
   30-day decision horizon. Resolved by X6: §14.2 now specifies indexed streams
   addressed by `(case_id, stream_name, tick)`, sized to `observation_horizon_days`.
@@ -908,3 +923,15 @@ Resolved:
 - 2026-08-27 — A53: `world.liquidity_window_days` moved into PARAMS — the last INV-10 literal, and the highest-leverage number in the world model.
 - 2026-08-27 — A54: §15 — `world.liquidity_window_days` named as a required member of the D4 sensitivity sweep.
 - 2026-08-29 — A55: §5.7 `CaseState` added — the contract the gates read, without which no gate can be pure.
+- 2026-08-29 — A56: §9 Viable column restated as authoritative and exhaustive; Forbidden is commentary.
+- 2026-08-29 — A57: §9 `serve_notice` made viable where a debit is. Superseded by A66.
+- 2026-08-29 — A58: §12 G10 class retry budget and G11 TRAI DND added.
+- 2026-08-29 — A59: §12 gates take no `hour` argument; the IST hour is derived from `created_at + tick`.
+- 2026-08-29 — A60: §5.7 `settled` and `settled_at` recorded; S1 reads state rather than a caller's bool.
+- 2026-08-29 — A61: §5.7 records the frozen collection types; `canonical_json` sorts frozensets.
+- 2026-08-29 — A62: §2.1 escalation eligibility moved to `settle/policy/escalation.py`; the dependency runs sim -> policy.
+- 2026-08-29 — A63: §9 escalation-eligible cases gain `voice_call` and `escalate_human`.
+- 2026-08-29 — A64: `settle/policy/params.py` created; PRIORS gains a Policy constants table; GEN-4 renamed PAR-1.
+- 2026-08-29 — A65: `scripts/gate.sh` derives its frozen list; intentionally local-only files report as INFO.
+- 2026-08-29 — A66: §9 `serve_notice` derived from the presence of a viable retry, not listed. Resolves OQ-22.
+- 2026-08-29 — A67: §5.7 `rail_switches_used` split from `attempts_used`; G10 reads retries only. Resolves OQ-23.

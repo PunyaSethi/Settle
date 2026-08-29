@@ -49,7 +49,11 @@ class CaseState(BaseModel):
     stop_reason: str | None = None
     stop_class: StopClass | None = None
 
+    # Retries only. A rail switch is a change of instrument, not a retry, and
+    # counting it against a class retry budget makes `switch_rail` unusable for
+    # `auth_abandoned` — the one class whose recovery path it is (A67).
     attempts_used: int = Field(default=0, ge=0)
+    rail_switches_used: int = Field(default=0, ge=0)
     contacts_used: int = Field(default=0, ge=0)
     contact_history: tuple[AwareDatetime, ...] = ()
     last_contact_at: AwareDatetime | None = None

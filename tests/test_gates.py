@@ -687,3 +687,27 @@ def test_GAT_15_dnd_is_no_longer_a_field_the_policy_ignores():
     )
     assert result.allowed is False
     assert "G11" in result.blocked_by
+
+
+def test_GAT_14_a_rail_switch_does_not_consume_the_class_retry_budget():
+    """A67. `attempts_used` counts retries; `rail_switches_used` counts switches.
+
+    Sharing one counter made `switch_rail` unusable for `auth_abandoned` — the
+    one class whose recovery path it is — because a single switch would exhaust
+    a retry budget the switch never used.
+    """
+    ambiguous = case(decline_code="do_not_honour")
+    switched = state(rail_switches_used=3, attempts_used=0)
+    assert gate_g10(ambiguous, switched, RETRY_CARD).allowed is True
+
+    retried = state(rail_switches_used=0, attempts_used=1)
+    assert gate_g10(ambiguous, retried, RETRY_CARD).allowed is False
+
+
+def test_GAT_14_the_two_counters_are_separate_fields():
+    from settle.schema.state import CaseState
+
+    assert "attempts_used" in CaseState.model_fields
+    assert "rail_switches_used" in CaseState.model_fields
+    fresh = state()
+    assert fresh.attempts_used == 0 and fresh.rail_switches_used == 0

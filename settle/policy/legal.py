@@ -121,9 +121,9 @@ def legal_actions(case: ObservedCase, state: CaseState) -> list[Action]:
             RequestMandateUpdate(channel=channel) for channel in message_channels(case)
         )
 
-    # §9 lists `serve_notice` as viable for the classes that can debit (A57).
-    # It is only meaningful on `enach`, which is the rail G9 governs — serving
-    # notice on a card debit would spend a contact and buy nothing.
+    # §9 derives `serve_notice` from the presence of a viable retry (A66). It
+    # is only meaningful on `enach`, the rail G9 governs — serving notice before
+    # a card debit would spend a contact and buy nothing.
     if ActionType.SERVE_NOTICE in viable and case.rail is Rail.ENACH:
         actions.extend(
             ServeNotice(channel=channel) for channel in message_channels(case)
