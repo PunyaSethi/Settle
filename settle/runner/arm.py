@@ -7,6 +7,18 @@ true rather than aspirational.
 
 An arm cannot reach around this interface. It receives the legal set, not the
 case's hidden truth, and it returns an action, not a dispatch.
+
+Gates before choosing
+---------------------
+An arm may consult gates before it chooses (A72). EXPLORE must, or its logged
+propensity describes the wrong distribution: sampling from the legal set and
+letting gates block afterwards makes the executed distribution non-uniform in a
+way `1/len(legal)` does not capture, and every IPS estimate built on it is wrong.
+OURS needs the same visibility to populate `Alternative.legal` and
+`Alternative.block_gate` (§5.4).
+
+Consulting gates is not bypassing them. The runner evaluates them again, in the
+one implementation §4 requires, and its verdict is the one that binds.
 """
 
 from typing import Protocol
@@ -16,6 +28,8 @@ from settle.schema.enums import ActionType
 from settle.schema.enums import ArmMode
 from settle.schema.observed import ObservedCase
 from settle.schema.state import CaseState
+from settle.runner.arms.baselines import FixedLadderArm, MaxPressureArm, SingleRetryArm
+from settle.runner.arms.explore import ExploreArm
 
 
 class Arm(Protocol):
@@ -70,4 +84,21 @@ class FirstLegalArm:
         return DoNothing()
 
 
-ARMS: dict[str, type] = {"b0": DoNothingArm, "first_legal": FirstLegalArm}
+def assert_enforce_only(name: str, mode: ArmMode) -> None:
+    """INV-11: OURS can never run in OBSERVE.
+
+    Enforced where arms are constructed rather than left to the arm registry,
+    so a future OURS cannot be handed OBSERVE by a CLI flag.
+    """
+    if name.upper() == "OURS" and mode is ArmMode.OBSERVE:
+        raise ValueError("INV-11: arm OURS can never run in OBSERVE mode")
+
+
+ARMS: dict[str, type] = {
+    "b0": DoNothingArm,
+    "b1": SingleRetryArm,
+    "b2": FixedLadderArm,
+    "b3": MaxPressureArm,
+    "explore": ExploreArm,
+    "first_legal": FirstLegalArm,
+}

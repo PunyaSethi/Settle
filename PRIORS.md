@@ -187,6 +187,15 @@ PAR-1 checks this table against it in both directions.
 | min_contact_gap_hours | 20 | ASSERTED | 2026-08-29 | pending D4 |
 | notice_window_days | 3 | ASSERTED | 2026-08-29 | pending D4 |
 | decision_cadence_hours | 24 | ASSERTED | 2026-08-29 | pending D4 |
+| action_grid.offset_now | 0 | ASSERTED | 2026-08-29 | pending D4 |
+| action_grid.offset_later_today | 6 | ASSERTED | 2026-08-29 | pending D4 |
+| action_grid.offset_next_morning | 18 | ASSERTED | 2026-08-29 | pending D4 |
+| action_grid.offset_next_evening | 30 | ASSERTED | 2026-08-29 | pending D4 |
+| action_grid.offset_two_days | 48 | ASSERTED | 2026-08-29 | pending D4 |
+| action_grid.offset_three_days | 72 | ASSERTED | 2026-08-29 | pending D4 |
+| action_grid.offset_five_days | 120 | ASSERTED | 2026-08-29 | pending D4 |
+| action_grid.offset_one_week | 168 | ASSERTED | 2026-08-29 | pending D4 |
+| action_grid.max_horizon_h | 720 | ASSERTED | 2026-08-29 | pending D4 |
 | class_retry_cap.time_shiftable | 4 | ASSERTED | 2026-08-29 | pending D4 |
 | class_retry_cap.transient | 3 | ASSERTED | 2026-08-29 | pending D4 |
 | class_retry_cap.dead_instrument | 0 | ASSERTED | 2026-08-29 | pending D4 |

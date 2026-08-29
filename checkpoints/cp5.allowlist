@@ -1,0 +1,15 @@
+# CP5 — EXPLORE and the remaining baselines. The action grid is declared here
+# and is binding on OURS at CP8.
+
+SPEC.md
+PRIORS.md
+scripts/gate.sh
+settle/policy/params.py
+settle/runner/arm.py
+settle/runner/run.py
+settle/runner/arms/__init__.py
+settle/runner/arms/explore.py
+settle/runner/arms/baselines.py
+tests/test_arms.py
+tests/test_explore.py
+checkpoints/cp5.allowlist

@@ -16,7 +16,8 @@ from pathlib import Path
 
 from settle.audit.chain import Ledger
 from settle.execute.executor import WorldHandle
-from settle.runner.arm import ARMS
+from settle.runner.arm import ARMS, assert_enforce_only
+from settle.runner.arms.explore import EXPLORE_SEED_RANGE, is_explore_seed
 from settle.runner.case_runner import run_case
 from settle.schema.enums import ArmMode
 from settle.sim.generator import generate_batch
@@ -40,8 +41,27 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # EXP-5, checked before anything is constructed. A run that trains on the
+    # evaluation seeds is not a held-out set, it is a memorisation test.
+    if args.arm == "explore" and not is_explore_seed(args.seed):
+        parser.error(
+            f"--arm explore requires a seed in {EXPLORE_SEED_RANGE.start}.."
+            f"{EXPLORE_SEED_RANGE.stop - 1}; got {args.seed}"
+        )
+    if args.arm != "explore" and is_explore_seed(args.seed):
+        parser.error(
+            f"seed {args.seed} belongs to the EXPLORE range and must not be used "
+            "for an evaluation arm"
+        )
+
     arm_class = ARMS[args.arm]
-    arm = arm_class(ArmMode(args.mode)) if args.arm == "first_legal" else arm_class()
+    if args.arm == "explore":
+        arm = arm_class(args.seed)
+    elif args.arm == "first_legal":
+        arm = arm_class(ArmMode(args.mode))
+    else:
+        arm = arm_class()
+    assert_enforce_only(arm.name, arm.mode)
     observability = perfect_observability() if args.perfect_observability else ObservabilityConfig()
     streams = Streams(args.seed)
 
@@ -65,6 +85,14 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  wall time     {elapsed:.2f}s  ({elapsed / args.cases * 1000:.3f} ms/case)")
     print(f"  ledger        {entries} entries -> {args.audit}")
     print(f"  final states  -> {args.out}")
+
+    decisions = getattr(arm, "decisions", None)
+    if decisions:
+        decisions_path = args.out.with_suffix(".decisions" + args.out.suffix)
+        with decisions_path.open("w", encoding="utf-8") as handle:
+            for decision in decisions:
+                handle.write(decision.model_dump_json() + "\n")
+        print(f"  decisions     {len(decisions)} -> {decisions_path}")
     print("  stops:")
     for reason, count in sorted(stops.items(), key=lambda kv: -kv[1]):
         print(f"    {reason:<34} {count:>6}  {count / args.cases:>6.1%}")

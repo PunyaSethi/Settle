@@ -163,6 +163,30 @@ estimator's training burden. Recorded in Known Limitations.
 Email is out of scope; recorded in Known Limitations. G7's
 opt-out-on-every-channel is bounded by exactly this list.
 
+**The action grid.** Actions carry parameters, so the space must be finite,
+declared, and identical everywhere. `POLICY_PARAMS` declares it:
+
+```
+action_grid.hour_offsets   (0, 6, 18, 30, 48, 72, 120, 168)   hours
+action_grid.max_horizon_h  720                                <= decision_horizon_days
+```
+
+Eight offsets, spanning the two dimensions the policy actually needs. `0` and
+`6` are a different hour of the same day; `18` and `30` a different hour of
+another day; `48`, `72`, `120` and `168` the same hour some days later. §9 asks
+`ambiguous` for "one retry at a different hour", which requires an offset that
+is not a multiple of 24. Reaching a liquidity window requires multi-day offsets.
+
+**Binding constraint.** This is the same grid the OURS policy searches. EXPLORE
+and OURS enumerate candidates through one function, and neither may widen or
+narrow it locally. An estimator trained on one grid and queried on another has
+zero coverage exactly where it is asked to predict, and its held-out
+calibration would look fine because the held-out set shares the same blind spot.
+
+Only `retry` carries a schedulable offset in the frozen verb set above, so the
+grid widens retries and evaluates every other verb at the runner's current hour.
+Widening the offset dimension to contacts needs a §5.3 amendment.
+
 `serve_notice` is an explicit verb, not an executor side effect. Under G9 a
 served notice is a full contact costing G2 budget and patience_budget (§20). If
 the executor served notices implicitly the policy would never price them, and
@@ -578,9 +602,25 @@ generate structurally zero opt-out violations while appearing to test them.
 | OURS | `settle` |
 | LLM-STRAT | Optional ablation arm, 300 cases, flag-gated. Proposes actions; clamped to the closed verb set and gated in ENFORCE. |
 
+EXPLORE evaluates gates itself and samples uniformly from `(action, hour)` pairs
+that pass both `legal_actions` and `evaluate_gates` in ENFORCE. Its logged
+propensity is `1/len(passing_pairs)`: the probability the executed action was
+chosen, not the probability it was proposed.
+
+Sampling from the legal set and letting gates block afterwards would make the
+executed distribution non-uniform in a way the logged propensity does not
+describe, and every IPS estimate built on it would be wrong.
+
+The Arm protocol therefore permits an arm to consult gates before choosing.
+OURS requires the same visibility to populate `Alternative.legal` and
+`Alternative.block_gate`. Consulting gates is not bypassing them: the runner
+evaluates them again, in the one implementation §4 requires, and its verdict
+binds.
+
 Baselines are given full capability and denied only intelligence: same channels,
 same templates, same e-mandate notice. A baseline crippled by omission produces a
-fake win.
+fake win. That includes channel choice — a baseline that only ever sends SMS
+where the customer has consented to WhatsApp has been crippled, not simplified.
 
 ### 14.2 Common random numbers
 
@@ -946,3 +986,5 @@ Resolved:
 - 2026-08-29 — A68: `decision_cadence_hours` moved into POLICY_PARAMS with a PRIORS row. Resolves OQ-26.
 - 2026-08-29 — A69: `pytest.ini` marks the 10,000-case runs `slow`; the default suite skips them. Resolves OQ-29.
 - 2026-08-29 — A70: §12 G4 restated as a card-network *submission* cap; `card_submissions_used` added to §5.7. Resolves OQ-27.
+- 2026-08-29 — A71: §5.3 declares the action grid — eight hour offsets, bounded by the decision horizon, shared by EXPLORE and OURS as a binding constraint.
+- 2026-08-29 — A72: §14.1 — EXPLORE samples the gate-passing set, not the legal set; the Arm protocol permits consulting gates before choosing.

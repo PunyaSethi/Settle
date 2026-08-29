@@ -125,7 +125,9 @@ done
 # --- 3. tests -------------------------------------------------------------
 echo
 echo "[3/4] pytest"
-if "$PY" -m pytest tests/ -q > /tmp/settle-gate-pytest.$$ 2>&1; then
+# -m "" overrides pytest.ini's "not slow": the fast suite is the dev loop,
+# the gate is the thing that has to be thorough.
+if "$PY" -m pytest tests/ -q -m "" > /tmp/settle-gate-pytest.$$ 2>&1; then
   pass "$(tail -1 /tmp/settle-gate-pytest.$$)"
 else
   fail "pytest red"
@@ -135,7 +137,7 @@ fi
 # --- 4. named test IDs ----------------------------------------------------
 echo
 echo "[4/4] named test IDs that ran"
-collected=$("$PY" -m pytest tests/ --collect-only -q 2>/dev/null)
+collected=$("$PY" -m pytest tests/ --collect-only -q -m "" 2>/dev/null)
 ids=$(printf '%s\n' "$collected" | grep -oE '[A-Z]{2,6}_[0-9]+' | sort -u -V)
 if [[ -z "$ids" ]]; then
   fail "no named test IDs found — every checkpoint test must carry one"
