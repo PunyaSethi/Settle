@@ -222,6 +222,39 @@ hash         str   sha256(prev_hash + canonical_json(entry_without_hash))
 
 Written to `out/audit.jsonl`. Verifiable by `python -m settle.audit.verify`.
 
+### 5.7 CaseState — what the gates read
+
+Implied throughout §12 and §13 but never specified. Gates cannot be pure without
+it.
+
+```
+CaseState
+  case_id            str
+  arm                str
+  arm_mode           ArmMode
+  status             enum  open | stopped
+  stop_reason        str | null
+  stop_class         StopClass | null
+  attempts_used      int
+  contacts_used      int
+  contact_history    list[datetime]      # for G2's rolling window
+  last_contact_at    datetime | null
+  opted_out          bool
+  disputed           bool
+  promise_date       date | null
+  promise_logged_at  datetime | null
+  notice_window_until datetime | null    # G9
+  dispatched_keys    set[str]            # G5 idempotency
+  tick               int                 # hours since case created_at
+```
+
+State transitions are recorded, never inferred. Any quantity a gate needs is a
+field here, not a derived scan of the ledger.
+
+The evaluation instant is `case.created_at + tick hours`. It is derived from the
+case's own anchor and never from a clock, which is what lets every gate be a
+pure function of its arguments.
+
 ## 6. The observability layer — DIFFERENTIATOR
 
 `settle/sim/observability.py` sits between the world and the agent. Every
@@ -828,3 +861,4 @@ Resolved:
 - 2026-08-27 — A52: §15 — records what the INV-10 rule caught on the second pass, and the test for whether a number belongs in PARAMS.
 - 2026-08-27 — A53: `world.liquidity_window_days` moved into PARAMS — the last INV-10 literal, and the highest-leverage number in the world model.
 - 2026-08-27 — A54: §15 — `world.liquidity_window_days` named as a required member of the D4 sensitivity sweep.
+- 2026-08-29 — A55: §5.7 `CaseState` added — the contract the gates read, without which no gate can be pure.

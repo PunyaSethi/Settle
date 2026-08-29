@@ -1,0 +1,15 @@
+# CP3 — diagnosis, gates, stops. Pure decision logic, no I/O, no clock, no
+# randomness, and nothing here imports settle.sim.
+
+SPEC.md
+settle/schema/state.py
+settle/diagnose/__init__.py
+settle/diagnose/taxonomy.py
+settle/policy/__init__.py
+settle/policy/gates.py
+settle/policy/stops.py
+settle/policy/legal.py
+tests/test_taxonomy.py
+tests/test_gates.py
+tests/test_stops.py
+checkpoints/cp3.allowlist
