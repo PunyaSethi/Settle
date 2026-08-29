@@ -64,10 +64,15 @@ def test_no_stop_fires_on_a_clean_open_case():
 # --------------------------------------------------------------------------
 
 def test_STP_1_s1_fires_only_on_a_settlement_never_an_authorisation():
-    """INV-1. `settled` arrives from reconciliation, not from what the agent did."""
-    assert check_stops(case(), state(), ArmMode.ENFORCE, settled=False) is None
+    """INV-1. `settled` is a recorded field (A60), set by reconciliation.
 
-    verdict = check_stops(case(), state(), ArmMode.ENFORCE, settled=True)
+    It was briefly an argument to `check_stops`; a caller-supplied bool is
+    inference by another name, and §5.7's rule is that state transitions are
+    recorded.
+    """
+    assert check_stops(case(), state(settled=False), ArmMode.ENFORCE) is None
+
+    verdict = check_stops(case(), state(settled=True), ArmMode.ENFORCE)
     assert verdict is not None
     assert verdict.stop == "S1"
     assert verdict.stop_class is StopClass.TERMINAL_STATE
@@ -76,8 +81,14 @@ def test_STP_1_s1_fires_only_on_a_settlement_never_an_authorisation():
 
 def test_STP_1_s1_outranks_every_other_stop():
     """Money that arrived is the end of the case, whatever else is true."""
-    messy = state(opted_out=True, disputed=True, attempts_used=ATTEMPT_BUDGET, tick=DECISION_HORIZON_HOURS)
-    assert check_stops(case(), messy, ArmMode.ENFORCE, settled=True).stop == "S1"
+    messy = state(
+        opted_out=True,
+        disputed=True,
+        attempts_used=ATTEMPT_BUDGET,
+        tick=DECISION_HORIZON_HOURS,
+        settled=True,
+    )
+    assert check_stops(case(), messy, ArmMode.ENFORCE).stop == "S1"
 
 
 # --------------------------------------------------------------------------
@@ -176,18 +187,18 @@ def test_STP_7_compliance_stops_are_relaxed_in_observe(mutation, expected_stop):
 
 
 @pytest.mark.parametrize(
-    ("mutation", "kwargs", "expected_stop"),
+    ("mutation", "expected_stop"),
     [
-        ({}, {"settled": True}, "S1"),
-        ({"attempts_used": ATTEMPT_BUDGET}, {}, "S3"),
-        ({"contacts_used": CONTACT_BUDGET}, {}, "S3"),
-        ({"tick": DECISION_HORIZON_HOURS}, {}, "S6"),
+        ({"settled": True}, "S1"),
+        ({"attempts_used": ATTEMPT_BUDGET}, "S3"),
+        ({"contacts_used": CONTACT_BUDGET}, "S3"),
+        ({"tick": DECISION_HORIZON_HOURS}, "S6"),
     ],
 )
-def test_STP_7_terminal_state_stops_bind_in_observe_too(mutation, kwargs, expected_stop):
+def test_STP_7_terminal_state_stops_bind_in_observe_too(mutation, expected_stop):
     """OBSERVE relaxes compliance, not physics. B3 is unguarded, not immortal."""
     for mode in (ArmMode.ENFORCE, ArmMode.OBSERVE):
-        verdict = check_stops(case(), state(**mutation), mode, **kwargs)
+        verdict = check_stops(case(), state(**mutation), mode)
         assert verdict is not None, f"{expected_stop} did not fire in {mode.value}"
         assert verdict.stop == expected_stop
         assert verdict.stop_class is StopClass.TERMINAL_STATE
@@ -201,6 +212,15 @@ def test_STP_7_s2_is_terminal_and_survives_observe_despite_needing_opt_out():
         verdict = check_stops(dead, state(opted_out=True), mode)
         assert verdict.stop == "S2"
         assert verdict.stop_class is StopClass.TERMINAL_STATE
+
+
+def test_STP_7_s1_is_read_from_state_not_supplied_by_the_caller():
+    """A60. If `settled` were an argument, any caller could assert a recovery."""
+    import inspect
+
+    assert "settled" not in inspect.signature(check_stops).parameters
+    assert "settled" in CaseState.model_fields
+    assert "settled_at" in CaseState.model_fields
 
 
 def test_STP_7_s7_is_deliberately_absent():

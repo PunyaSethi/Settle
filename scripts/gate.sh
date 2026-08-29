@@ -22,7 +22,9 @@ set -uo pipefail
 CHECKPOINT="${1:-}"
 ALLOWLIST="${2:-}"
 BASELINE="${SETTLE_GATE_BASELINE:-HEAD}"
-FROZEN=(SPEC.md DECISIONS.md PRIORS.md)
+# Frozen files are derived, not hardcoded (A65): any file in the tree whose
+# name is one of these is frozen, wherever it sits.
+FROZEN_NAMES=(SPEC.md DECISIONS.md PRIORS.md)
 
 if [[ -z "$CHECKPOINT" || -z "$ALLOWLIST" ]]; then
   echo "usage: scripts/gate.sh <checkpoint-name> <allowlist-file>" >&2
@@ -42,6 +44,7 @@ FAILED=0
 fail() { echo "  FAIL  $*"; FAILED=1; }
 pass() { echo "  ok    $*"; }
 warn() { echo "  WARN  $*"; }
+info() { echo "  info  $*"; }
 
 echo "gate: $CHECKPOINT   (baseline $BASELINE, allowlist $ALLOWLIST)"
 
@@ -91,6 +94,14 @@ fi
 # --- 2. frozen files ------------------------------------------------------
 echo
 echo "[2/4] frozen files"
+
+FROZEN=()
+for name in "${FROZEN_NAMES[@]}"; do
+  while IFS= read -r found; do
+    [[ -n "$found" ]] && FROZEN+=("${found#./}")
+  done < <(find . -name "$name" -not -path './.git/*' -not -path './.venv/*' 2>/dev/null | sort)
+done
+
 for f in "${FROZEN[@]}"; do
   if [[ ! -f "$f" ]]; then
     fail "$f — missing"
@@ -102,8 +113,12 @@ for f in "${FROZEN[@]}"; do
     else
       fail "$f — frozen file modified. Stop and ask before changing it."
     fi
+  elif git check-ignore -q "$f"; then
+    # Deliberately local-only. Not an anomaly, and it should not read like one
+    # at every checkpoint.
+    info "$f — intentionally local-only, gitignored and never committed."
   else
-    warn "$f — untracked, so git cannot verify it against $BASELINE. This check becomes real at the first commit."
+    warn "$f — untracked but not ignored. Nothing to verify it against."
   fi
 done
 

@@ -27,19 +27,21 @@ CODE_TO_CLASS: Final[dict[str, DeclineClass]] = {
     "fraud_flagged": DeclineClass.TERMINAL,
 }
 
-# SPEC §9, the Viable actions column, read as a whitelist.
+# SPEC §9, the Viable actions column. Authoritative and exhaustive (A56): the
+# Forbidden column is commentary explaining why an omission is deliberate, not a
+# subtractive blacklist. Any verb absent from Viable is not available.
 #
-# Two readings were available. Under a blacklist reading — anything not in the
-# Forbidden column is permitted — `dead_instrument` would permit `switch_rail`,
-# `voice_call` and `escalate_human`, none of which the Viable column lists.
-# `terminal` settles it: its Forbidden column says "everything else", which only
-# parses if Viable is the whitelist. So Viable is exhaustive everywhere.
-#
-# `do_nothing` is added to every class because §5.3 requires it to be selectable
-# always — an arm that cannot decline to act is a baseline, not a policy.
+# `serve_notice` is viable for `time_shiftable` and `transient` because on
+# `enach` it is required before a debit outside an active notice window (A34,
+# G9). Without it those classes have no compliant path to the action §9 calls
+# their best one.
 VIABLE_ACTIONS: Final[dict[DeclineClass, frozenset[ActionType]]] = {
-    DeclineClass.TIME_SHIFTABLE: frozenset({ActionType.DO_NOTHING, ActionType.RETRY}),
-    DeclineClass.TRANSIENT: frozenset({ActionType.DO_NOTHING, ActionType.RETRY}),
+    DeclineClass.TIME_SHIFTABLE: frozenset(
+        {ActionType.DO_NOTHING, ActionType.RETRY, ActionType.SERVE_NOTICE}
+    ),
+    DeclineClass.TRANSIENT: frozenset(
+        {ActionType.DO_NOTHING, ActionType.RETRY, ActionType.SERVE_NOTICE}
+    ),
     DeclineClass.DEAD_INSTRUMENT: frozenset(
         {ActionType.DO_NOTHING, ActionType.REQUEST_MANDATE_UPDATE, ActionType.SEND_MESSAGE}
     ),
@@ -74,9 +76,15 @@ FORBIDDEN_ACTIONS: Final[dict[DeclineClass, frozenset[ActionType]]] = {
             ActionType.ESCALATE_HUMAN,
         }
     ),
-    DeclineClass.DEAD_INSTRUMENT: frozenset({ActionType.RETRY, ActionType.SWITCH_RAIL}),
-    DeclineClass.AUTH_ABANDONED: frozenset({ActionType.RETRY}),
-    DeclineClass.AMBIGUOUS: frozenset({ActionType.VOICE_CALL, ActionType.ESCALATE_HUMAN}),
+    DeclineClass.DEAD_INSTRUMENT: frozenset(
+        {ActionType.RETRY, ActionType.SWITCH_RAIL, ActionType.SERVE_NOTICE}
+    ),
+    DeclineClass.AUTH_ABANDONED: frozenset(
+        {ActionType.RETRY, ActionType.REQUEST_MANDATE_UPDATE, ActionType.SERVE_NOTICE}
+    ),
+    DeclineClass.AMBIGUOUS: frozenset(
+        {ActionType.REQUEST_MANDATE_UPDATE, ActionType.SWITCH_RAIL, ActionType.SERVE_NOTICE}
+    ),
     DeclineClass.TERMINAL: frozenset(
         {
             ActionType.RETRY,
@@ -88,6 +96,31 @@ FORBIDDEN_ACTIONS: Final[dict[DeclineClass, frozenset[ActionType]]] = {
         }
     ),
 }
+
+
+# SPEC §9, A63. An escalation-eligible case (§2.1) reaches a human. Without
+# this the 15% slice §2 defines is unreachable and `voice_call` is viable for no
+# class at all. Eligibility is a property of `ObservedCase`, never of
+# `CaseState`, so reading it does not make `legal_actions` state-dependent.
+ESCALATION_VIABLE_ADDITIONS: Final[dict[DeclineClass, frozenset[ActionType]]] = {
+    DeclineClass.DEAD_INSTRUMENT: frozenset(
+        {ActionType.VOICE_CALL, ActionType.ESCALATE_HUMAN}
+    ),
+    DeclineClass.AUTH_ABANDONED: frozenset(
+        {ActionType.VOICE_CALL, ActionType.ESCALATE_HUMAN}
+    ),
+    DeclineClass.AMBIGUOUS: frozenset({ActionType.VOICE_CALL, ActionType.ESCALATE_HUMAN}),
+}
+
+
+def viable_actions(
+    decline_class: DeclineClass, escalation_eligible: bool = False
+) -> frozenset[ActionType]:
+    """The verbs §9 permits for a class, widened for the escalation slice."""
+    base = VIABLE_ACTIONS[decline_class]
+    if not escalation_eligible:
+        return base
+    return base | ESCALATION_VIABLE_ADDITIONS.get(decline_class, frozenset())
 
 
 class Diagnosis(NamedTuple):

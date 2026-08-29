@@ -168,8 +168,34 @@ the section above, out of the flag's reach, so SF-1 and SF-7 remain producible.
 
 ## Cost and policy parameters
 
-SPEC §20. Not generator parameters — these price actions and derive opt-out
-cost, and they are consumed by the policy rather than by the world.
+Consumed by the policy rather than by the world.
+
+### Policy constants
+
+Our configuration, not assumptions about the world. These are choices we made
+and must defend, distinct from sampled parameters which are claims about
+reality. Source of truth: `settle/policy/params.py`, the `POLICY_PARAMS` dict.
+PAR-1 checks this table against it in both directions.
+
+| parameter | value | source | date | sensitivity |
+|---|---|---|---|---|
+| card_network_retry_cap | 4 | ASSERTED | 2026-08-29 | pending D4 |
+| attempt_budget | 6 | ASSERTED | 2026-08-29 | pending D4 |
+| contact_budget | 5 | ASSERTED | 2026-08-29 | pending D4 |
+| frequency_cap_per_window | 3 | ASSERTED | 2026-08-29 | pending D4 |
+| frequency_window_hours | 168 | ASSERTED | 2026-08-29 | pending D4 |
+| min_contact_gap_hours | 20 | ASSERTED | 2026-08-29 | pending D4 |
+| notice_window_days | 3 | ASSERTED | 2026-08-29 | pending D4 |
+| class_retry_cap.time_shiftable | 4 | ASSERTED | 2026-08-29 | pending D4 |
+| class_retry_cap.transient | 3 | ASSERTED | 2026-08-29 | pending D4 |
+| class_retry_cap.dead_instrument | 0 | ASSERTED | 2026-08-29 | pending D4 |
+| class_retry_cap.auth_abandoned | 0 | ASSERTED | 2026-08-29 | pending D4 |
+| class_retry_cap.ambiguous | 1 | ASSERTED | 2026-08-29 | pending D4 |
+| class_retry_cap.terminal | 0 | ASSERTED | 2026-08-29 | pending D4 |
+
+### Cost and opt-out parameters
+
+SPEC §20. These price actions and derive opt-out cost.
 
 | parameter | value | source | date | sensitivity |
 |---|---|---|---|---|

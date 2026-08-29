@@ -35,7 +35,8 @@ from settle.schema.action import (
 from settle.schema.enums import ActionType, Channel, DeclineClass, Rail
 from settle.schema.observed import ObservedCase
 from settle.schema.state import CaseState, CaseStatus
-from settle.diagnose.taxonomy import VIABLE_ACTIONS, classify
+from settle.diagnose.taxonomy import classify, viable_actions
+from settle.policy.escalation import is_escalation_eligible
 
 # An action the customer perceives. G1, G2 and G7 apply to exactly these and to
 # nothing else: a silent retry is a message to the bank, not to a person, and
@@ -95,7 +96,9 @@ def legal_actions(case: ObservedCase, state: CaseState) -> list[Action]:
         return []
 
     decline_class = classify(case.decline_code)
-    viable = VIABLE_ACTIONS[decline_class]
+    # Eligibility reads only `ObservedCase` (§2.1), so consulting it here does
+    # not make this function state-dependent and LEG-3 keeps holding.
+    viable = viable_actions(decline_class, is_escalation_eligible(case))
     actions: list[Action] = []
 
     if ActionType.DO_NOTHING in viable:
@@ -118,13 +121,10 @@ def legal_actions(case: ObservedCase, state: CaseState) -> list[Action]:
             RequestMandateUpdate(channel=channel) for channel in message_channels(case)
         )
 
-    # §9's table predates `serve_notice` (A34) and never mentions it. But A34
-    # requires the agent to spend a contact on notice before it can legally
-    # debit an `enach` mandate outside an active window (G9). Where a debit is
-    # viable and the rail is `enach`, the notice that makes it legal has to be
-    # viable too, or the class has no compliant path to the action §9 says is
-    # its best one. See the CP3 report.
-    if case.rail is Rail.ENACH and ActionType.RETRY in viable:
+    # §9 lists `serve_notice` as viable for the classes that can debit (A57).
+    # It is only meaningful on `enach`, which is the rail G9 governs — serving
+    # notice on a card debit would spend a contact and buy nothing.
+    if ActionType.SERVE_NOTICE in viable and case.rail is Rail.ENACH:
         actions.extend(
             ServeNotice(channel=channel) for channel in message_channels(case)
         )

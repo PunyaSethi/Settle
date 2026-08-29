@@ -30,12 +30,15 @@ from typing import Final, NamedTuple
 
 from settle.schema.enums import ArmMode, DeclineClass, StopClass
 from settle.schema.observed import ObservedCase
+from settle.policy.params import POLICY_PARAMS
 from settle.schema.state import CaseState, CaseStatus
 from settle.diagnose.taxonomy import classify
 
-# S3 — SPEC §13 gives no numbers. ASSERTED.
-ATTEMPT_BUDGET: Final[int] = 6
-CONTACT_BUDGET: Final[int] = 5
+# S3 — SPEC §13 gives no numbers. These live in POLICY_PARAMS with rows in
+# PRIORS.md under Policy constants, because they bound B3's violation count and
+# a number that bounds a reported metric is INV-10's business (SPEC §15).
+ATTEMPT_BUDGET: Final[int] = int(POLICY_PARAMS["attempt_budget"])
+CONTACT_BUDGET: Final[int] = int(POLICY_PARAMS["contact_budget"])
 
 # S6 — SPEC §13.1. The agent stops acting at 30 days; the world runs to 60.
 DECISION_HORIZON_DAYS: Final[int] = 30
@@ -62,16 +65,13 @@ def check_stops(
     case: ObservedCase,
     state: CaseState,
     arm_mode: ArmMode,
-    *,
-    settled: bool = False,
 ) -> StopVerdict | None:
     """The first stop that applies, or None.
 
-    `settled` is a keyword argument rather than a `CaseState` field because
-    §5.7 records no settlement flag. S1 requires a *settlement* record and not
-    an authorisation (INV-1), and that fact arrives from reconciliation rather
-    than from anything the agent did — so it is passed in explicitly rather
-    than inferred. See the CP3 report.
+    S1 reads `state.settled`, a recorded field (§5.7, A60). It was briefly a
+    keyword argument; that was inference by another name, and §5.7's rule is
+    that state transitions are recorded. The flag arrives from reconciliation,
+    which is the only thing entitled to say a settlement happened (INV-1).
     """
     if state.status is CaseStatus.STOPPED:
         return StopVerdict(
@@ -83,7 +83,7 @@ def check_stops(
     # --- TERMINAL_STATE: binding in every arm, OBSERVE included -------------
 
     # S1. INV-1: a settlement record, never an authorisation.
-    if settled:
+    if state.settled:
         return _terminal("S1", "S1_RECOVERED_SETTLED")
 
     # S2. A dead instrument is only terminal when there is no way left to ask

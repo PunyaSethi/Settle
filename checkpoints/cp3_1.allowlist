@@ -1,0 +1,26 @@
+# CP3.1 — carry-forward from the CP3 report: whitelist §9, two new gates, the
+# hour argument removed, the escalation rule moved out of settle.sim, and every
+# policy constant given a PRIORS row.
+
+SPEC.md
+PRIORS.md
+scripts/gate.sh
+settle/schema/state.py
+settle/schema/canonical.py
+settle/policy/escalation.py
+settle/policy/params.py
+settle/policy/legal.py
+settle/policy/gates.py
+settle/policy/stops.py
+settle/diagnose/taxonomy.py
+settle/sim/generator.py
+tests/test_gates.py
+tests/test_stops.py
+tests/test_generator.py
+tests/test_schema.py
+checkpoints/cp3_1.allowlist
+
+# tests/test_taxonomy.py was not on the stated allowlist, but A59 removed the
+# `hour` argument from evaluate_gates and that file calls it. The requirement
+# is unsatisfiable without the edit; it is one line. Flagged in the report.
+tests/test_taxonomy.py

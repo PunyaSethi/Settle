@@ -27,6 +27,7 @@ from settle.sim.generator import (
     is_escalation_eligible,
     summarise,
 )
+from settle.policy.params import POLICY_PARAMS
 from settle.sim.observability import (
     OBSERVABILITY_DEFAULTS,
     REPORTING_PARAMETERS,
@@ -309,7 +310,12 @@ def test_GEN_3_reporting_defaults_are_all_non_zero_and_zeroable():
 
 
 # --------------------------------------------------------------------------
-# GEN-4 — PARAMS <-> PRIORS.md
+# PAR-1 — the parameter registries against PRIORS.md
+#
+# Renamed from GEN-4 (A64). It now covers two registries, only one of which is
+# the generator's: `settle.sim.generator.PARAMS` holds claims about reality,
+# `settle.policy.params.POLICY_PARAMS` holds choices we made. Both are numbers
+# that move reported metrics, so INV-10 covers both.
 # --------------------------------------------------------------------------
 
 def _priors_table(heading: str) -> dict[str, str]:
@@ -331,7 +337,7 @@ def _priors_table(heading: str) -> dict[str, str]:
     return rows
 
 
-def test_GEN_4_every_sampled_param_has_a_row_and_nothing_else_does():
+def test_PAR_1_every_sampled_param_has_a_row_and_nothing_else_does():
     """A50's split, enforced in both directions.
 
     The sampled table must be exactly the parameters something reads to draw a
@@ -345,7 +351,7 @@ def test_GEN_4_every_sampled_param_has_a_row_and_nothing_else_does():
     }
 
 
-def test_GEN_4_asserted_targets_have_their_own_table():
+def test_PAR_1_asserted_targets_have_their_own_table():
     rows = _priors_table("### Asserted targets")
     assert set(rows) == set(ASSERTED_TARGETS)
     assert not (set(rows) & set(SAMPLED_PARAMS)), "a target is listed as sampled too"
@@ -353,18 +359,18 @@ def test_GEN_4_asserted_targets_have_their_own_table():
         assert float(rows[key]) == PARAMS[key]
 
 
-def test_GEN_4_sampled_and_targets_together_are_the_whole_params_dict():
+def test_PAR_1_sampled_and_targets_together_are_the_whole_params_dict():
     assert set(SAMPLED_PARAMS) | set(ASSERTED_TARGETS) == set(PARAMS)
     assert not (set(SAMPLED_PARAMS) & set(ASSERTED_TARGETS))
 
 
-def test_GEN_4_recorded_values_match_the_code():
+def test_PAR_1_recorded_values_match_the_code():
     rows = _priors_table("### Sampled parameters")
     drifted = {k: (SAMPLED_PARAMS[k], rows[k]) for k in SAMPLED_PARAMS if float(rows[k]) != SAMPLED_PARAMS[k]}
     assert not drifted, f"PRIORS.md disagrees with PARAMS: {drifted}"
 
 
-def test_GEN_4_every_prior_is_sourced_or_marked_asserted():
+def test_PAR_1_every_prior_is_sourced_or_marked_asserted():
     text = (REPO_ROOT / "PRIORS.md").read_text(encoding="utf-8")
     for line in text.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
@@ -372,7 +378,7 @@ def test_GEN_4_every_prior_is_sourced_or_marked_asserted():
             assert cells[2], f"{cells[0]} has an empty source column (INV-10)"
 
 
-def test_GEN_4_observability_defaults_are_recorded_too():
+def test_PAR_1_observability_defaults_are_recorded_too():
     rows = _priors_table("## Observability parameters")
     assert set(rows) == set(OBSERVABILITY_DEFAULTS)
     for key, value in OBSERVABILITY_DEFAULTS.items():
@@ -577,7 +583,7 @@ def test_GEN_7_SF1_is_still_producible_under_perfect_observability(batch):
     )
 
 
-def test_GEN_4_the_relocated_literals_are_read_not_merely_declared():
+def test_PAR_1_the_relocated_literals_are_read_not_merely_declared():
     """A48 and A49 moved eight numbers out of code and into PARAMS.
 
     A parameter nobody reads is worse than a literal: it carries a PRIORS row
@@ -602,3 +608,64 @@ def test_GEN_4_the_relocated_literals_are_read_not_merely_declared():
         "world.liquidity_window_days",
     ):
         assert f'PARAMS["{key}"]' in world_source, f"{key} has a PRIORS row but nothing reads it"
+
+
+def test_PAR_1_every_policy_constant_has_a_row_and_nothing_else_does():
+    """A64. `POLICY_PARAMS` is our configuration rather than a claim about the
+    world, so it gets its own table — but a number that bounds B3's violation
+    count is still INV-10's business."""
+    rows = _priors_table("### Policy constants")
+    assert sorted(rows) == sorted(POLICY_PARAMS), {
+        "missing": sorted(set(POLICY_PARAMS) - set(rows)),
+        "orphans": sorted(set(rows) - set(POLICY_PARAMS)),
+    }
+
+
+def test_PAR_1_recorded_policy_values_match_the_code():
+    rows = _priors_table("### Policy constants")
+    drifted = {k: (POLICY_PARAMS[k], rows[k]) for k in POLICY_PARAMS if float(rows[k]) != POLICY_PARAMS[k]}
+    assert not drifted, f"PRIORS.md disagrees with POLICY_PARAMS: {drifted}"
+
+
+def test_PAR_1_the_two_registries_do_not_overlap():
+    """A key in both would have two sources of truth and two tables."""
+    assert not (set(PARAMS) & set(POLICY_PARAMS))
+
+
+def test_PAR_1_every_decline_class_has_a_retry_cap():
+    """G10 looks one up per class; a missing key would be a KeyError mid-run."""
+    from settle.schema.enums import DeclineClass
+
+    for decline_class in DeclineClass:
+        assert f"class_retry_cap.{decline_class.value}" in POLICY_PARAMS
+
+
+# --------------------------------------------------------------------------
+# GEN-8 — the escalation rule lives in policy and stays there
+# --------------------------------------------------------------------------
+
+def test_GEN_8_escalation_module_imports_nothing_from_settle_sim():
+    """SPEC §2.1. The dependency runs sim -> policy and never the reverse.
+
+    A46 required the policy to recompute eligibility from observables. It could
+    not, because the rule lived inside `settle.sim` — the package a policy
+    module may not import (INV-8). Moving it here is what made A46 satisfiable.
+    """
+    leaked = _leaks(REPO_ROOT / "settle" / "policy" / "escalation.py")
+    assert not leaked, f"settle/policy/escalation.py imports hidden truth: {leaked}"
+
+
+def test_GEN_8_the_generator_is_the_side_that_imports():
+    """Direction matters: sim depends on policy, not policy on sim."""
+    generator_imports = _imported_modules(SIM_DIR / "generator.py")
+    assert "settle.policy.escalation" in generator_imports
+
+
+def test_GEN_8_the_rule_is_a_pure_function_of_observed_case():
+    """It reads no CaseState, so `legal_actions` can consult it without becoming
+    state-dependent — which is what keeps LEG-3 true."""
+    import inspect
+
+    from settle.policy.escalation import is_escalation_eligible
+
+    assert list(inspect.signature(is_escalation_eligible).parameters) == ["case"]

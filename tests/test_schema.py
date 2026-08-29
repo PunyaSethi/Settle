@@ -503,3 +503,46 @@ def test_SCH_9_the_pairing_is_enforced_on_json_input_too():
                 }
             )
         )
+
+
+# --------------------------------------------------------------------------
+# SCH-10 — canonical_json and frozen collections
+# --------------------------------------------------------------------------
+
+def test_SCH_10_a_frozenset_encodes_sorted_so_a_case_state_can_be_hashed():
+    """A61. Without this, `CaseState` could not enter the audit chain at all.
+
+    A set's iteration order is not a property of its value — it varies with
+    PYTHONHASHSEED — so the encoder sorts rather than trusting iteration.
+    """
+    assert canonical_json({"k": frozenset({"c", "a", "b"})}) == b'{"k":["a","b","c"]}'
+    assert canonical_json({"k": frozenset({"a", "b", "c"})}) == canonical_json(
+        {"k": frozenset({"c", "b", "a"})}
+    )
+    assert canonical_json(frozenset()) == b"[]"
+
+
+def test_SCH_10_a_mutable_set_is_still_refused():
+    """A mutable container inside a frozen contract is only half frozen."""
+    with pytest.raises(TypeError, match="mutable sets"):
+        canonical_json({"k": {"a", "b"}})
+
+
+def test_SCH_10_case_state_round_trips_and_hashes_deterministically():
+    from settle.schema.state import CaseState
+
+    first = CaseState(
+        case_id="case-1",
+        arm="OURS",
+        arm_mode=ArmMode.ENFORCE,
+        contact_history=(AT,),
+        last_contact_at=AT,
+        dispatched_keys=frozenset({"beta", "alpha"}),
+        settled=True,
+        settled_at=AT,
+        tick=7,
+    )
+    second = CaseState.model_validate_json(first.model_dump_json())
+    assert second == first
+    assert canonical_json(first) == canonical_json(second)
+    assert b'"dispatched_keys":["alpha","beta"]' in canonical_json(first)

@@ -248,6 +248,6 @@ def test_LEG_3_gates_do_however_block_actions_the_legal_set_still_offers():
     action = SendMessage(channel=Channel.SMS, template_id="t")
 
     assert action.type in {a.type for a in legal_actions(subject, opted_out)}
-    result = evaluate_gates(subject, opted_out, action, 10, ArmMode.ENFORCE)
+    result = evaluate_gates(subject, opted_out, action, ArmMode.ENFORCE)
     assert not result.allowed
     assert "G7" in result.blocked_by

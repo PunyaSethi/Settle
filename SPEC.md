@@ -33,6 +33,18 @@ slice is where promise-to-pay lives.
 Out of scope as a lane: checkout abandonment, B2B invoice chasing, disputes,
 refunds.
 
+### 2.1 Escalation eligibility
+
+`is_escalation_eligible(case)` reads only `ObservedCase` fields
+(`amount_paise >= escalation.min_amount_paise` AND
+`attempt_number >= escalation.min_attempt_number`).
+
+It lives in `settle/policy/escalation.py` and `settle/sim/generator.py` imports
+it from there. The dependency runs sim -> policy and never policy -> sim: the
+latter is an INV-8 breach. A46 required the policy to recompute from
+observables; it could not, because the rule lived inside the package the policy
+may not import.
+
 ## 3. Scope
 
 | In | Out |
@@ -244,9 +256,21 @@ CaseState
   promise_date       date | null
   promise_logged_at  datetime | null
   notice_window_until datetime | null    # G9
-  dispatched_keys    set[str]            # G5 idempotency
+  dispatched_keys    frozenset[str]      # G5 idempotency
+  settled            bool                # S1; a settlement, never an authorisation
+  settled_at         datetime | null
   tick               int                 # hours since case created_at
 ```
+
+Collections are frozen types, not `list` and `set`. A frozen model holding a
+mutable list is only half frozen, and a `set`'s iteration order varies with
+`PYTHONHASHSEED` — two processes would serialise the same state differently and
+GEN-1 would stop holding. `contact_history` is a `tuple`; `dispatched_keys` is a
+`frozenset` serialised sorted.
+
+S1 reads `settled`. It is a recorded field rather than an argument to
+`check_stops` because a caller-supplied bool is inference by another name, and
+§5.7's rule is that state transitions are recorded, never inferred.
 
 State transitions are recorded, never inferred. Any quantity a gate needs is a
 field here, not a derived scan of the ledger.
@@ -340,12 +364,27 @@ never invoked on a decline code.
 
 | Class | Codes | Viable actions | Forbidden |
 |---|---|---|---|
-| `time_shiftable` | insufficient_funds | retry inside liquidity window, quiet | contact, same-hour retry |
-| `transient` | gateway_timeout, issuer_down | retry after backoff, quiet | contact |
-| `dead_instrument` | card_expired, mandate_revoked, card_stolen | request_mandate_update, send_message | any retry |
-| `auth_abandoned` | authentication_failed | send_message, switch_rail | retry same rail |
-| `ambiguous` | do_not_honour | one retry different hour, then message | repeated retry |
-| `terminal` | fraud_flagged | escalate_human | everything else |
+| `time_shiftable` | insufficient_funds | do_nothing, retry, serve_notice | contact, same-hour retry |
+| `transient` | gateway_timeout, issuer_down | do_nothing, retry, serve_notice | contact |
+| `dead_instrument` | card_expired, mandate_revoked, card_stolen | do_nothing, request_mandate_update, send_message | any retry |
+| `auth_abandoned` | authentication_failed | do_nothing, send_message, switch_rail | retry same rail |
+| `ambiguous` | do_not_honour | do_nothing, retry, send_message | repeated retry beyond G10's cap |
+| `terminal` | fraud_flagged | do_nothing, escalate_human | everything else |
+
+The Viable column is authoritative and exhaustive. The Forbidden column is
+commentary explaining why an omission is deliberate; it is not a subtractive
+blacklist. Any verb absent from Viable is not available to that class.
+
+`serve_notice` is viable for `time_shiftable` and `transient` because on `enach`
+it is required before a debit outside an active notice window (A34, G9). Without
+it those classes would have no compliant path to the action this table calls
+their best one.
+
+**Escalation-eligible cases** (§2.1) additionally gain `voice_call` and
+`escalate_human` for `dead_instrument`, `auth_abandoned` and `ambiguous`.
+Without this the 15% slice §2 defines is unreachable and `voice_call` is viable
+for no class at all. Eligibility is a property of `ObservedCase`, so
+`legal_actions` may read it without becoming state-dependent.
 
 Codes not in the table map to `ambiguous` and are counted. An unmapped-code rate
 above 5% is a gate failure.
@@ -453,8 +492,15 @@ degrading silently. Every run prints calls, cache hits, tokens, estimated cost.
 | G8 | Dispute freeze |
 | G9 | e-mandate pre-debit notice. A served notice covers a notified debit window of 3 days from the notified date. Retries inside the window inherit the notice. Retries outside require fresh notice, which costs 24h lead time. G9 sequences the plan, it is not a checkbox. Window length ASSERTED, source in D4. A served notice is a full contact: subject to G1's window, counted against G2's frequency cap, and consuming patience_budget. ASSERTED. Consequence: outside an active window a compliant enach retry costs two of three weekly contacts. The alternative treatment (notice as regulatory overhead, exempt from G2) is recorded in Known Limitations. |
 
+| G10 | Class retry budget. Per-class cap on retries, distinct from G4's card-network cap. `ambiguous` = 1: §9 permits one retry at a different hour, then a message. Without this, `ambiguous` retries are unbounded until G4 or S3 fires. |
+| G11 | TRAI DND registry. Blocks `voice_call` when `dnd_flag` is set. Does not block SMS or WhatsApp: DND covers unsolicited commercial contact, and a transactional message to an existing customer about a failed payment is exempt. That exemption is ASSERTED and recorded in Known Limitations. |
+
 Every gate has exactly one named test. Blocks are logged with a reason code and
 counted; `gate_blocks > 0` is a required condition for a valid run.
+
+`evaluate_gates` derives the IST evaluation hour from `case.created_at +
+state.tick`. It does not accept an hour argument. An inconsistent `(tick, hour)`
+pair must be unrepresentable, not merely undocumented.
 
 ## 13. Stops — terminal
 

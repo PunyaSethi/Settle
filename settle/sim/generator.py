@@ -27,6 +27,11 @@ from settle.schema.enums import (
     MandateState,
     Rail,
 )
+from settle.policy.escalation import (
+    ESCALATION_MIN_AMOUNT_PAISE,
+    ESCALATION_MIN_ATTEMPT_NUMBER,
+    is_escalation_eligible,
+)
 from settle.schema.observed import ObservedCase
 from settle.sim.streams import derive_unit_float
 from settle.sim.truth import GeneratedCase, HiddenTruth
@@ -101,8 +106,8 @@ PARAMS: Final[dict[str, float]] = {
     # version drew a coin within the high-value population; that draw was not
     # recoverable from observables and had to go.
     "escalation.target_overall_rate": 0.15,
-    "escalation.min_amount_paise": 74900.0,
-    "escalation.min_attempt_number": 2.0,
+    "escalation.min_amount_paise": float(ESCALATION_MIN_AMOUNT_PAISE),
+    "escalation.min_attempt_number": float(ESCALATION_MIN_ATTEMPT_NUMBER),
     # --- intent mix (§5.2) ---
     "intent_mix.willing_able": 0.33,
     "intent_mix.willing_broke": 0.38,
@@ -431,6 +436,8 @@ def generate_case(seed: int, index: int) -> GeneratedCase:
         will_reverse=d("will_reverse") < PARAMS["will_reverse_rate"],
     )
 
+    # SPEC §2.1 — the rule lives in settle/policy/, and the dependency runs
+    # sim -> policy. The reverse would be an INV-8 breach.
     escalation_eligible = is_escalation_eligible(observed)
 
     return GeneratedCase(
@@ -439,20 +446,6 @@ def generate_case(seed: int, index: int) -> GeneratedCase:
         behaviour=behaviour,
         decline_class=decline_class,
         escalation_eligible=escalation_eligible,
-    )
-
-
-def is_escalation_eligible(observed: ObservedCase) -> bool:
-    """SPEC §2's escalation slice, from observables alone.
-
-    High value, retries exhausted. Both halves are fields of `ObservedCase`, so
-    a policy recomputes this rather than receiving it — see A46. GEN-6 asserts
-    the recomputation matches what the generator recorded for every case in the
-    batch; if it ever stops matching, the flag has become a channel.
-    """
-    return (
-        observed.amount_paise >= PARAMS["escalation.min_amount_paise"]
-        and observed.attempt_number >= PARAMS["escalation.min_attempt_number"]
     )
 
 

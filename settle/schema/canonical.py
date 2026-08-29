@@ -20,7 +20,9 @@ The rules, and why each one is needed:
   `settle/schema/`. This encoder cannot tell a money field from any other
   number, so it enforces what it can — `Decimal` is rejected, and non-finite
   floats are rejected because `NaN` and `Infinity` are not JSON.
-- **No sets.** Iteration order is not defined by the value.
+- **`frozenset` sorted, `set` refused.** Iteration order is not a property
+  of a set's value, so a frozenset is sorted on the way out and a mutable
+  set is refused outright.
 
 `canonical_json` returns `bytes`, not `str`, because the thing that follows it
 is `hashlib`, and bytes is the type that has no encoding ambiguity left in it.
@@ -90,8 +92,19 @@ def to_canonical_obj(obj: Any) -> Any:
             out[key] = to_canonical_obj(value)
         return out
 
-    if isinstance(obj, (set, frozenset)):
-        raise TypeError("canonical_json refuses sets: iteration order is not a property of the value")
+    if isinstance(obj, frozenset):
+        # Sorted, so the encoding is a property of the value rather than of the
+        # process that built it. Set iteration order varies with
+        # PYTHONHASHSEED, which would make the same CaseState hash differently
+        # in two runs — exactly what GEN-1 and the audit chain rule out.
+        return sorted(to_canonical_obj(item) for item in obj)
+
+    if isinstance(obj, set):
+        raise TypeError(
+            "canonical_json refuses mutable sets: use frozenset, which this "
+            "encoder sorts. A mutable container inside a frozen contract is "
+            "only half frozen"
+        )
 
     if isinstance(obj, Sequence):
         return [to_canonical_obj(item) for item in obj]

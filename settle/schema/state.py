@@ -64,6 +64,13 @@ class CaseState(BaseModel):
 
     dispatched_keys: frozenset[str] = frozenset()
 
+    # S1. A settlement record, never an authorisation (INV-1). Recorded here
+    # rather than passed to `check_stops` because a caller-supplied bool is
+    # inference by another name, and §5.7's rule is that state transitions are
+    # recorded, not inferred.
+    settled: bool = False
+    settled_at: AwareDatetime | None = None
+
     tick: int = Field(default=0, ge=0)
 
     @field_serializer("dispatched_keys")
