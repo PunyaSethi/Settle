@@ -27,6 +27,10 @@ POLICY_PARAMS: Final[dict[str, float]] = {
     "min_contact_gap_hours": 20,
     # G9 — SPEC §12, the notified debit window.
     "notice_window_days": 3,
+    # The runner's cadence when it has chosen to do nothing and no timer is
+    # pending. It sets how many decisions an arm gets across the horizon, and
+    # therefore contacts per case, which is a §14.4 headline.
+    "decision_cadence_hours": 24,
     # G10 — per-class retry budget, distinct from G4's card-network cap.
     # `ambiguous` is 1 because §9 permits one retry at a different hour and then
     # a message; without the cap those retries run until G4 or S3 fires, which

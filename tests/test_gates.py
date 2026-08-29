@@ -227,19 +227,33 @@ def test_GAT_3_g3_permits_a_debit_on_an_active_mandate_and_ignores_contacts():
 # GAT-4 — G4 card-network retry cap
 # --------------------------------------------------------------------------
 
-def test_GAT_4_g4_blocks_a_card_retry_at_the_cap_and_permits_one_below_it():
-    at_cap = state(attempts_used=CARD_NETWORK_RETRY_CAP)
+def test_GAT_4_g4_blocks_a_card_submission_at_the_cap_and_permits_one_below_it():
+    """A70: the counter is `card_submissions_used`, not `attempts_used`."""
+    at_cap = state(card_submissions_used=CARD_NETWORK_RETRY_CAP)
     assert gate_g4(case(), at_cap, RETRY_CARD).allowed is False
     assert gate_g4(case(), at_cap, RETRY_CARD).reason_code == "G4_CARD_RETRY_CAP"
-    assert gate_g4(case(), state(attempts_used=CARD_NETWORK_RETRY_CAP - 1), RETRY_CARD).allowed
+    assert gate_g4(
+        case(), state(card_submissions_used=CARD_NETWORK_RETRY_CAP - 1), RETRY_CARD
+    ).allowed
+
+
+def test_GAT_4_g4_counts_submissions_whichever_verb_produced_them():
+    """A70. G10 caps retries per class; G4 caps traffic to a network. Retries
+    on other rails and switches away from card fill neither of G4's counters."""
+    elsewhere = state(attempts_used=99, rail_switches_used=99, card_submissions_used=0)
+    assert gate_g4(case(), elsewhere, RETRY_CARD).allowed is True
+
+    at_cap = state(card_submissions_used=CARD_NETWORK_RETRY_CAP)
+    assert gate_g4(case(rail=Rail.UPI_AUTOPAY), at_cap, SwitchRail(to=Rail.CARD)).allowed is False
 
 
 def test_GAT_4_g4_is_a_card_rule_and_follows_the_action_not_the_case():
     """A switch away from card escapes the cap; a switch to card does not."""
-    at_cap = state(attempts_used=CARD_NETWORK_RETRY_CAP)
+    at_cap = state(card_submissions_used=CARD_NETWORK_RETRY_CAP)
     assert gate_g4(case(rail=Rail.CARD), at_cap, SwitchRail(to=Rail.UPI_AUTOPAY)).allowed is True
     assert gate_g4(case(rail=Rail.UPI_AUTOPAY), at_cap, SwitchRail(to=Rail.CARD)).allowed is False
     assert gate_g4(case(rail=Rail.ENACH), at_cap, RETRY_ENACH).allowed is True
+    assert gate_g4(case(), at_cap, RETRY_CARD).reason_code == "G4_CARD_RETRY_CAP"
 
 
 # --------------------------------------------------------------------------

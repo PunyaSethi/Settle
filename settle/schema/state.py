@@ -54,6 +54,11 @@ class CaseState(BaseModel):
     # `auth_abandoned` — the one class whose recovery path it is (A67).
     attempts_used: int = Field(default=0, ge=0)
     rail_switches_used: int = Field(default=0, ge=0)
+    # G4 counts submissions to the card network, whichever verb produced them:
+    # a retry on card and a switch *to* card are both submissions, a switch away
+    # is not (A70). Separate from the two above because G4 and G10 are counting
+    # different things.
+    card_submissions_used: int = Field(default=0, ge=0)
     contacts_used: int = Field(default=0, ge=0)
     contact_history: tuple[AwareDatetime, ...] = ()
     last_contact_at: AwareDatetime | None = None

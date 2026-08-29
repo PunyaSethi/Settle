@@ -249,6 +249,7 @@ CaseState
   stop_class         StopClass | null
   attempts_used      int                 # retries only; read by G4 and G10
   rail_switches_used int                 # a switch is a change of instrument
+  card_submissions_used int              # G4; a retry on card or a switch to card
   contacts_used      int
   contact_history    list[datetime]      # for G2's rolling window
   last_contact_at    datetime | null
@@ -495,7 +496,7 @@ degrading silently. Every run prints calls, cache hits, tokens, estimated cost.
 | G1 | Contact window 08:00–19:00 IST |
 | G2 | Frequency cap: 3 per week, 20h minimum gap |
 | G3 | Mandate validity |
-| G4 | Card-network retry cap |
+| G4 | Card-network submission cap. Counts submissions to the card network, whichever verb produced them: a `retry` on card and a `switch_rail` **to** card both count, a switch away does not. Distinct from G10, which caps retries per decline class. |
 | G5 | Idempotency key uniqueness |
 | G6 | Promise suppression window |
 | G7 | Opt-out honoured on every channel |
@@ -837,6 +838,13 @@ Resolved inside the checkpoint that reaches them, not by further spec amendment.
 
 Resolved:
 
+- OQ-26 — the runner's daily cadence was a bare literal. Resolved by A68:
+  `decision_cadence_hours` in POLICY_PARAMS with a PRIORS row, covered by PAR-1.
+- OQ-27 — G4 read `attempts_used`, so a switch to card escaped the card-network
+  cap. Resolved by A70: G4 counts `card_submissions_used`, which a retry on card
+  and a switch to card both increment.
+- OQ-29 — the suite was slow enough to stop being run. Resolved by A69: the
+  10,000-case runs are marked `slow` and opt-in.
 - OQ-22 — `ambiguous` had a viable retry and no way to open a notice window, so
   it was unreachable on `enach`. Resolved by A66: `serve_notice` is derived from
   the presence of a viable retry rather than listed per class.
@@ -935,3 +943,6 @@ Resolved:
 - 2026-08-29 — A65: `scripts/gate.sh` derives its frozen list; intentionally local-only files report as INFO.
 - 2026-08-29 — A66: §9 `serve_notice` derived from the presence of a viable retry, not listed. Resolves OQ-22.
 - 2026-08-29 — A67: §5.7 `rail_switches_used` split from `attempts_used`; G10 reads retries only. Resolves OQ-23.
+- 2026-08-29 — A68: `decision_cadence_hours` moved into POLICY_PARAMS with a PRIORS row. Resolves OQ-26.
+- 2026-08-29 — A69: `pytest.ini` marks the 10,000-case runs `slow`; the default suite skips them. Resolves OQ-29.
+- 2026-08-29 — A70: §12 G4 restated as a card-network *submission* cap; `card_submissions_used` added to §5.7. Resolves OQ-27.

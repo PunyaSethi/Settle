@@ -172,12 +172,19 @@ def gate_g3(case: ObservedCase, state: CaseState, action: Action) -> GateVerdict
 # ---------------------------------------------------------------------------
 
 def gate_g4(case: ObservedCase, state: CaseState, action: Action) -> GateVerdict:
-    """Card networks cap retries on a declined credential."""
+    """Card networks cap submissions on a declined credential.
+
+    Submissions, not retries (A70). A `switch_rail` to card puts the same
+    credential in front of the same network, so it counts; a switch away does
+    not. `card_submissions_used` is therefore its own counter — G10 caps
+    retries by class and G4 caps traffic to a network, and the two are not the
+    same question.
+    """
     if not is_debit(action):
         return GateVerdict(True, "G4", "G4_NOT_A_DEBIT")
     if target_rail(case, action) is not Rail.CARD:
         return GateVerdict(True, "G4", "G4_NOT_A_CARD_RAIL")
-    if state.attempts_used >= CARD_NETWORK_RETRY_CAP:
+    if state.card_submissions_used >= CARD_NETWORK_RETRY_CAP:
         return GateVerdict(False, "G4", "G4_CARD_RETRY_CAP")
     return GateVerdict(True, "G4", "G4_WITHIN_CARD_CAP")
 

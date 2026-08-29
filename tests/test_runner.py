@@ -281,9 +281,10 @@ def test_RUN_7_observe_records_violations_and_proceeds_enforce_blocks(tmp_path, 
 
 
 # --------------------------------------------------------------------------
-# RUN-8
+# RUN-8 — marked `slow`, opt in with `pytest -m slow` (A69)
 # --------------------------------------------------------------------------
 
+@pytest.mark.slow
 @pytest.mark.parametrize("arm_class", [DoNothingArm, FirstLegalArm])
 def test_RUN_8_ten_thousand_cases_complete_without_error(tmp_path, arm_class, capsys):
     full = generate_batch(10_000, SEED)
@@ -369,3 +370,34 @@ def test_RUN_9_the_runner_never_reads_an_actual_outcome():
         names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
         attrs = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
         assert "ActualOutcome" not in names | attrs, module_path.name
+
+
+def test_RUN_8_the_cadence_is_a_recorded_parameter_not_a_literal():
+    """A68. It sets how many decisions an arm gets across the horizon, and
+    therefore contacts per case — a §14.4 headline, so INV-10 covers it."""
+    from settle.policy.params import POLICY_PARAMS
+
+    assert DECISION_CADENCE_HOURS == int(POLICY_PARAMS["decision_cadence_hours"])
+
+
+def test_RUN_8_a_switch_to_card_counts_as_a_card_network_submission():
+    """A70. G4 caps traffic to a network; the verb that produced it is irrelevant."""
+    from settle.policy.gates import CARD_NETWORK_RETRY_CAP, gate_g4
+    from settle.schema.action import SwitchRail
+
+    generated = generate_batch(1, SEED).cases[0]
+    case = generated.observed.model_copy(update={"rail": Rail.UPI_AUTOPAY})
+    base = CaseState(case_id=case.case_id, arm="B0", arm_mode=ArmMode.ENFORCE)
+
+    to_card = SwitchRail(to=Rail.CARD)
+    away = SwitchRail(to=Rail.ENACH)
+
+    at_cap = base.model_copy(update={"card_submissions_used": CARD_NETWORK_RETRY_CAP})
+    assert gate_g4(case, at_cap, to_card).allowed is False
+    assert gate_g4(case, at_cap, away).allowed is True
+
+    # Retries and switches that never touched card do not fill the counter.
+    busy_elsewhere = base.model_copy(
+        update={"attempts_used": 99, "rail_switches_used": 99, "card_submissions_used": 0}
+    )
+    assert gate_g4(case, busy_elsewhere, to_card).allowed is True

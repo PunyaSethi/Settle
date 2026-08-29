@@ -1,0 +1,17 @@
+# CP4.1 — housekeeping: the cadence into POLICY_PARAMS, a slow marker for the
+# 10,000-case runs, and G4 restated as a card-network submission cap.
+
+SPEC.md
+PRIORS.md
+pytest.ini
+settle/policy/params.py
+settle/runner/case_runner.py
+tests/test_runner.py
+checkpoints/cp4_1.allowlist
+
+# --- outside the stated allowlist, all three required by A70 ---------------
+# G4 lives in gates.py, its counter is a CaseState field, and its tests assert
+# the old counter. A70 says "implement", which is unsatisfiable without them.
+settle/policy/gates.py
+settle/schema/state.py
+tests/test_gates.py

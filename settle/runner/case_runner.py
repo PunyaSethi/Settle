@@ -30,9 +30,9 @@ served is the example: no amount of time opens a notice window, only a
 `serve_notice` does, so the runner falls through to the daily cadence and gives
 the arm another decision rather than spinning.
 
-The daily cadence is a unit, not a tuned parameter — the agent reconsiders once
-a day when it has chosen to do nothing. If it ever becomes a knob, it needs a
-PRIORS row (see §21).
+The daily cadence lives in `POLICY_PARAMS` with a PRIORS row. It is not
+cosmetic: it sets how many decisions an arm gets across the horizon, and
+therefore contacts per case, which is a §14.4 headline.
 
 Every step strictly increases the tick, so termination is guaranteed by S6
 regardless of what an arm does.
@@ -50,18 +50,21 @@ from settle.policy.gates import (
     after_serve_notice,
     evaluate_gates,
     evaluation_hour,
+    target_rail,
 )
 from settle.policy.legal import is_contact, is_debit, legal_actions
+from settle.policy.params import POLICY_PARAMS
 from settle.policy.stops import DECISION_HORIZON_HOURS, check_stops
 from settle.schema.action import Action, Retry, SwitchRail
-from settle.schema.enums import ActionType, Actor, ArmMode, LedgerKind, ReportedStatus
+from settle.schema.enums import ActionType, Actor, ArmMode, LedgerKind, Rail, ReportedStatus
 from settle.schema.observed import ObservedCase
 from settle.schema.outcome import ReportedOutcome
 from settle.schema.state import CaseState, CaseStatus, as_of
 
-# One day. A unit rather than a tuned parameter: when the arm has chosen to do
-# nothing and no timer is pending, it reconsiders tomorrow.
-DECISION_CADENCE_HOURS: Final[int] = 24
+# When the arm has chosen to do nothing and no timer is pending, it reconsiders
+# tomorrow. In POLICY_PARAMS with a PRIORS row (A68): it sets how many decisions
+# an arm gets across the horizon, and therefore contacts per case.
+DECISION_CADENCE_HOURS: Final[int] = int(POLICY_PARAMS["decision_cadence_hours"])
 
 # Termination is guaranteed by S6, but a bug in tick advancement would spin
 # forever rather than fail. This turns that into a loud error.
@@ -127,6 +130,11 @@ def _apply_dispatch(case: ObservedCase, state: CaseState, action: Action, key: s
     elif isinstance(action, SwitchRail):
         # A67: a switch is a change of instrument, not a retry.
         update["rail_switches_used"] = state.rail_switches_used + 1
+
+    # A70: G4 counts submissions to the card network, whichever verb produced
+    # them. A retry on card and a switch to card are both submissions.
+    if is_debit(action) and target_rail(case, action) is Rail.CARD:
+        update["card_submissions_used"] = state.card_submissions_used + 1
 
     if is_contact(action):
         update["contacts_used"] = state.contacts_used + 1
