@@ -555,6 +555,10 @@ horizon.
 Wrongly logging a brush-off as a promise suppresses contact for weeks and is a
 worse failure than missing a real promise.
 
+The escalation rate is measured against an adversarial corpus written
+independently of the classifier. A rate measured against text the classifier's
+own author produced is not a measurement.
+
 The deterministic classifier is `settle/text/classify.py`. It imports no client
 and makes no network call, and RPL-6 asserts it. Its `unclear` count is the LLM
 escalation rate, reported per run. An opt-out outranks every other reading in
@@ -1091,3 +1095,4 @@ Resolved:
 - 2026-08-30 — A77: INV-8 names `settle/recon/` as its single exception, and §7 records why. Resolves OQ-20 and OQ-28.
 - 2026-08-30 — A78: §14.3 records natural recovery as the mechanism that makes incremental scoring meaningful; `world.natural_recovery` added with per-intent priors.
 - 2026-08-30 — A79: §5.5 `ReportedOutcome` carries `reply_text`; §11 records the deterministic classifier and the escalation rate it reports.
+- 2026-08-30 — A80: §11 — the escalation rate is measured against a corpus written independently of the classifier. Measured at CP7.0: 44.4% agreement, 72.2% escalation.

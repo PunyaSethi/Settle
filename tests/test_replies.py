@@ -338,3 +338,154 @@ def test_RPL_7_G6_G7_and_G8_all_fire_at_least_once(tmp_path):
     )
     for gate in ("G6", "G7", "G8"):
         assert blocks[gate] > 0, f"{gate} never fired: {dict(blocks)}"
+
+
+# --------------------------------------------------------------------------
+# RPL-8 — a payment claim is a claim
+# --------------------------------------------------------------------------
+
+PAYMENT_CLAIMS = [
+    "maine to kar diya tha payment gaya kyu nahi",
+    "ho gaya na payment? check karo",
+    "bhej diya hai screenshot bhejun kya",
+    "paise bhej diya",
+]
+
+
+@pytest.mark.parametrize("text", PAYMENT_CLAIMS)
+def test_RPL_8_a_payment_claim_never_marks_a_case_recovered(text):
+    """INV-1. The customer saying they paid is not a settlement record.
+
+    A claim is the *least* reliable signal in the system — it is unverified,
+    self-reported, and frequently sincere but wrong: the debit failed and the
+    customer is describing a payment that never left their account. Only
+    reconciliation against a settlement may set `settled`.
+    """
+    from settle.schema.observed import ObservedCase
+    from settle.runner.case_runner import _apply_outcome
+    from settle.schema.outcome import ReportedOutcome
+    from settle.schema.enums import ReportedStatus
+
+    case: ObservedCase = generate_batch(1, SEED).cases[0].observed
+    state = CaseState(case_id=case.case_id, arm="B2", arm_mode=ArmMode.ENFORCE)
+    outcome = ReportedOutcome(
+        case_id=case.case_id, at=case.created_at, status=ReportedStatus.FAILED,
+        arrival_count=1, reply_text=text,
+    )
+    updated, verdict = _apply_outcome(case, state, outcome)
+
+    assert verdict is not None
+    assert updated.settled is False, "a payment claim set `settled`"
+    assert updated.settled_at is None
+    assert updated == state.model_copy(update={}), "a payment claim changed state at all"
+
+
+def test_RPL_8_no_reply_verdict_can_set_settled():
+    """Across every kind, not just the claim. `settled` has exactly one source."""
+    from settle.runner.case_runner import _VERDICT_REASONS, _apply_outcome
+    from settle.schema.enums import ReportedStatus
+    from settle.schema.outcome import ReportedOutcome
+
+    case = generate_batch(1, SEED).cases[0].observed
+    state = CaseState(case_id=case.case_id, arm="B2", arm_mode=ArmMode.ENFORCE)
+    for text in [t for texts in FIXTURES.values() for t in texts] + PAYMENT_CLAIMS:
+        outcome = ReportedOutcome(
+            case_id=case.case_id, at=case.created_at, status=ReportedStatus.CAPTURED,
+            arrival_count=1, reply_text=text,
+        )
+        updated, _ = _apply_outcome(case, state, outcome)
+        assert updated.settled is False, text
+    assert set(_VERDICT_REASONS) == set(ReplyKind)
+
+
+def test_RPL_8_the_runner_never_writes_settled_at_all():
+    """Structural, not behavioural. `settled` is reconciliation's field."""
+    source = (REPO_ROOT / "settle" / "runner" / "case_runner.py").read_text(encoding="utf-8")
+    assert '"settled"' not in source
+    assert "settled=True" not in source
+
+
+# --------------------------------------------------------------------------
+# RPL-9 — the escalation rate, measured honestly
+# --------------------------------------------------------------------------
+
+CORPUS_PATH = REPO_ROOT / "fixtures" / "replies_adversarial.jsonl"
+
+# Measured at CP7.0 against a corpus written independently of the classifier.
+# These are a ratchet, not a target: the classifier may only get better.
+BASELINE_AGREEMENT = 8
+BASELINE_ESCALATION = 13
+CORPUS_SIZE = 18
+
+
+def _corpus():
+    import json
+
+    return [json.loads(line) for line in CORPUS_PATH.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def test_RPL_9_the_adversarial_corpus_is_well_formed():
+    rows = _corpus()
+    assert len(rows) == CORPUS_SIZE
+    kinds = {k.value for k in ReplyKind}
+    for row in rows:
+        assert row["expected"] in kinds, row
+        assert row["text"].strip(), row
+        assert row["gloss"] and row["note"], row
+    assert len({row["text"] for row in rows}) == CORPUS_SIZE
+
+
+def test_RPL_9_the_escalation_rate_is_measured_and_reported(capsys):
+    """The 0.00% from CP6.1 was an artefact: the debtors spoke from a phrase
+    bank this classifier's author wrote. A rate measured against text the
+    classifier's own author produced is not a measurement.
+    """
+    rows = _corpus()
+    agree, unclear, disagreements = 0, 0, []
+    for row in rows:
+        verdict = classify_reply(row["text"], ANCHOR)
+        got = verdict.kind.value
+        agree += got == row["expected"]
+        unclear += got == ReplyKind.UNCLEAR.value
+        if got != row["expected"]:
+            disagreements.append((row["id"], row["expected"], got, row["text"]))
+
+    with capsys.disabled():
+        print(f"\n  adversarial corpus: {len(rows)} replies written independently")
+        print(f"    agreement with intent  {agree}/{len(rows)} = {agree / len(rows):.1%}")
+        print(f"    escalation rate        {unclear}/{len(rows)} = {unclear / len(rows):.1%}")
+        for case_id, expected, got, text in disagreements:
+            print(f"    {case_id:>2}  wanted {expected:<14} got {got:<14} {text[:44]}")
+
+    # A ratchet. Falling below the measured baseline is a regression; rising
+    # above it is the work. Never tune the classifier to satisfy this.
+    assert agree >= BASELINE_AGREEMENT, f"agreement regressed: {agree} < {BASELINE_AGREEMENT}"
+    assert unclear <= BASELINE_ESCALATION, f"escalation regressed: {unclear} > {BASELINE_ESCALATION}"
+
+
+def test_RPL_9_a_contact_instruction_is_indistinguishable_from_a_promise():
+    """Recorded because it is currently true, not because it is acceptable.
+
+    "message me after the 8th, I'll do it then" and "I'll pay on the 8th"
+    classify identically. The first is an instruction about *contact*; treating
+    it as a promise suppresses contact under G6 and then records a broken
+    promise under SF-4 when no payment arrives — one misreading producing two
+    wrong numbers.
+    """
+    instruction = classify_reply("aath tareekh ke baad msg karna tab kar dunga", ANCHOR)
+    promise = classify_reply("aath tareekh ko kar dunga", ANCHOR)
+    assert instruction.kind is promise.kind is ReplyKind.PROMISE
+    assert instruction.promise_date == promise.promise_date
+
+    # The corpus entry escapes only through a spelling variant the pattern
+    # happens not to match. That is luck, not discrimination.
+    assert classify_reply("aath tareek kebaad msg karna tab kar dunga", ANCHOR).kind is ReplyKind.UNCLEAR
+
+
+def test_RPL_9_cancellation_is_not_detected_as_an_opt_out():
+    """Ruling 1, recorded as it stands. `cancel kardo` is a subscription
+    cancellation; the schema has one `opted_out` flag serving both meanings, and
+    the classifier currently detects neither."""
+    for text in ("cancel kardo", "cancel karde bhai", "subscription cancel kar do"):
+        assert classify_reply(text, ANCHOR).kind is ReplyKind.UNCLEAR, text
+    assert classify_reply("STOP", ANCHOR).kind is ReplyKind.OPT_OUT

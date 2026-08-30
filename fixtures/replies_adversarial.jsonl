@@ -1,0 +1,18 @@
+{"id": 1, "text": "nahi hai bhai abhi mai baad mei de dunga", "expected": "hedged", "gloss": "no money now, will give later. Commitment verb but no date at all.", "note": "A commitment with no date is not actionable. Nothing to suppress contact until."}
+{"id": 2, "text": "baar baar text karna band kardo bhai nahi chahiye abhi cancel kardo", "expected": "opt_out", "gloss": "stop texting me, don't want it, cancel it", "note": "Stop-contact and cancel-subscription in one message. Our schema has one flag for both."}
+{"id": 3, "text": "maine to kar diya tha payment gaya kyu nahi", "expected": "payment_claim", "gloss": "I did pay, why didn't it go through", "note": "A claim, not a settlement. INV-1: only reconciliation may say recovered."}
+{"id": 4, "text": "fifteenth se pehle nahi de paunga mai abhi paise nahi hai", "expected": "unclear", "gloss": "I cannot pay BEFORE the fifteenth, no money now", "note": "A date bounded from below is not a commitment on that date. The negation inverts it."}
+{"id": 5, "text": "hai nahi kate paise? issue to nahi hona chahiye koi. phirse try karta hu", "expected": "hedged", "gloss": "the money wasn't taken? shouldn't be a problem. I'll try again", "note": "Offers to try. No date, no commitment to pay."}
+{"id": 6, "text": "abhi haath tight hai thoda mai karta hu do chaar din mei", "expected": "promise", "gloss": "money is tight, I'll do it in two-to-four days", "note": "A range, not a point. A human reads this as a commitment inside four days."}
+{"id": 7, "text": "aath tareek kebaad msg karna tab kar dunga", "expected": "unclear", "gloss": "message me after the 8th, I'll do it then", "note": "A contact instruction, not a promise. Treating it as a promise suppresses contact AND then records a broken promise."}
+{"id": 8, "text": "cancel karde bhai nahi hai abhi paise jab ayenge tab renew kara lunga", "expected": "opt_out", "gloss": "cancel it, no money now, I'll renew when I have some", "note": "Subscription cancellation, not a TRAI DND opt-out. Same flag serves both."}
+{"id": 9, "text": "k", "expected": "unclear", "gloss": "k", "note": "Acknowledgement of nothing."}
+{"id": 10, "text": "haan bhai theek hai", "expected": "hedged", "gloss": "yes brother, fine", "note": "Agreement to nothing in particular."}
+{"id": 11, "text": "kal dekhta hu", "expected": "hedged", "gloss": "I'll look tomorrow", "note": "Looking is not paying. A date attached to a hedge is still a hedge."}
+{"id": 12, "text": "ho gaya na payment? check karo", "expected": "payment_claim", "gloss": "the payment went through, right? check", "note": "Claim framed as a question."}
+{"id": 13, "text": "paise kat gaye lekin subscription active nahi hai", "expected": "payment_claim", "gloss": "money was deducted but the subscription isn't active", "note": "Claims payment and reports a service fault. The payment half is what matters here."}
+{"id": 14, "text": "mera account hi nahi hai aapke yahan", "expected": "dispute", "gloss": "I don't even have an account with you", "note": "Denies the relationship entirely."}
+{"id": 15, "text": "agle hafte", "expected": "promise", "gloss": "next week", "note": "Terse, but in reply to a payment chase a human reads it as a commitment."}
+{"id": 16, "text": "bhej diya hai screenshot bhejun kya", "expected": "payment_claim", "gloss": "I've sent it, shall I send a screenshot", "note": "Offers proof, which is a strong claim."}
+{"id": 17, "text": "अभी नहीं है भाई", "expected": "hedged", "gloss": "not right now, brother", "note": "Devanagari. A refusal with no commitment and no date."}
+{"id": 18, "text": "पंद्रह तारीख को कर दूंगा", "expected": "promise", "gloss": "I'll do it on the fifteenth", "note": "Devanagari, word numeral, explicit commitment."}

@@ -1,0 +1,8 @@
+# CP7.0 — the honest escalation rate, measured against text the classifier's
+# author did not write. The classifier was NOT tuned to pass it.
+
+SPEC.md
+fixtures/replies_adversarial.jsonl
+tests/test_replies.py
+settle/text/classify.py
+checkpoints/cp7_0.allowlist
