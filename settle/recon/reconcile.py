@@ -27,7 +27,7 @@ from settle.schema.enums import LedgerKind, ReportedStatus, SilentFailureClass
 from settle.schema.ledger import LedgerEntry
 from settle.schema.observed import ObservedCase
 from settle.sim.observability import ObservabilityConfig, reversal_reported_at
-from settle.sim.truth import ActualOutcome
+from settle.sim.truth import ActualOutcome, HiddenTruth
 
 OBSERVATION_HORIZON_DAYS: Final[int] = 60
 
@@ -104,6 +104,8 @@ def reconcile(
     *,
     horizon_days: int = OBSERVATION_HORIZON_DAYS,
     config: ObservabilityConfig | None = None,
+    truths: dict[str, "HiddenTruth"] | None = None,
+    streams=None,
 ) -> dict[str, ReconciledCase]:
     """One record per case. SPEC §7.
 
@@ -123,6 +125,15 @@ def reconcile(
         horizon = case.created_at + timedelta(days=horizon_days)
         records = actual_outcomes.get(case_id, [])
 
+        # A case can cure itself with no arm involved (§14.3, A77). The agent
+        # was not told — nobody sent a webhook for a customer who topped up and
+        # paid through another route — so this is discoverable only here.
+        self_cured_at = None
+        if truths is not None and streams is not None and case_id in truths:
+            from settle.sim.world import natural_recovery_at
+
+            self_cured_at = natural_recovery_at(case, truths[case_id], streams)
+
         settled_record = next(
             (
                 (outcome, reversed_at)
@@ -138,6 +149,14 @@ def reconcile(
         amount = 0
         reversed_flag = False
         reversed_at: datetime | None = None
+
+        if settled_record is None and self_cured_at is not None:
+            if self_cured_at > horizon:
+                censored = True
+            else:
+                settled = True
+                settled_at = self_cured_at
+                amount = case.amount_paise
 
         if settled_record is not None:
             outcome, raw_reversed_at = settled_record
@@ -230,6 +249,7 @@ def run_arm(arm_key: str, n_cases: int, seed: int):
 
     actuals: dict[str, list[ActualRecord]] = {}
     cases: dict[str, ObservedCase] = {}
+    truths: dict[str, HiddenTruth] = {}
     path = Path(tempfile.mkdtemp()) / f"{arm_key}.jsonl"
     with Ledger(path) as ledger:
         for generated in batch.cases:
@@ -237,7 +257,8 @@ def run_arm(arm_key: str, n_cases: int, seed: int):
             run_case(generated.observed, arm, world, config, ledger)
             actuals[generated.observed.case_id] = list(world.actuals)
             cases[generated.observed.case_id] = generated.observed
-    return read_entries(path), actuals, cases, arm.name, arm.mode
+            truths[generated.observed.case_id] = generated.truth
+    return read_entries(path), actuals, cases, arm.name, arm.mode, truths, streams
 
 
 def failure_counts(reconciled: dict[str, ReconciledCase]) -> dict[SilentFailureClass, int]:
@@ -260,8 +281,8 @@ def print_table(n_cases: int, seed: int, seeded: int = 0, labels_path: Path | No
     print("  " + "-" * (len(header) - 2))
 
     for arm_key in ("b0", "b1", "b2", "b3", "explore"):
-        entries, actuals, cases, name, mode = run_arm(arm_key, n_cases, seed)
-        reconciled = reconcile(entries, actuals, cases)
+        entries, actuals, cases, name, mode, truths, streams = run_arm(arm_key, n_cases, seed)
+        reconciled = reconcile(entries, actuals, cases, truths=truths, streams=streams)
         counts = failure_counts(reconciled)
         believed = sum(1 for r in reconciled.values() if r.ledger_says_recovered)
         settled = sum(1 for r in reconciled.values() if r.actually_settled)
@@ -318,6 +339,7 @@ def seed_failures(n: int):
     entries: list[LedgerEntry] = []
     actuals: dict[str, list[ActualRecord]] = {}
     cases: dict[str, ObservedCase] = {}
+    truths: dict[str, HiddenTruth] = {}
     seq = 0
 
     def case_for(case_id: str) -> ObservedCase:

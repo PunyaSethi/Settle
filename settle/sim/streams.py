@@ -52,6 +52,15 @@ STREAM_TICK_UNITS: Final[dict[str, str]] = {
     "webhook_dup": "per reported outcome",
     "reply_draw": "per contact",
     "patience_draw": "per contact",
+    # Reporting-layer ordering. It belongs in the shared space for the same
+    # reason `webhook_drop` does: every arm must face the identical distortion
+    # on the same case, or the comparison is measuring luck (OQ-34).
+    "out_of_order": "per reported outcome",
+    # Whether and when a case cures itself, with no arm involved. Shared so the
+    # self-cure is identical across arms — that is what makes §14.3's
+    # incremental subtraction mean anything.
+    "natural_recovery_draw": "per case",
+    "natural_recovery_day": "per case",
 }
 STREAM_NAMES: Final[tuple[str, ...]] = tuple(STREAM_TICK_UNITS)
 

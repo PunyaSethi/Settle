@@ -25,8 +25,8 @@ from datetime import datetime
 from typing import Final
 
 from settle.policy.gates import idempotency_key
-from settle.sim.generator import PARAMS
-from settle.policy.legal import is_debit
+from settle.sim.generator import PARAMS, behaviour_for
+from settle.policy.legal import is_contact, is_debit
 from settle.schema.action import Action
 from settle.schema.enums import ReportedStatus
 from settle.schema.observed import ObservedCase
@@ -62,6 +62,22 @@ def dispatch_key(case: ObservedCase, state: CaseState, action: Action) -> str:
     return idempotency_key(case, state, action)
 
 
+def _reply_for(case: ObservedCase, state: CaseState, world: WorldHandle) -> str | None:
+    """What the customer says back to a contact. SPEC §8, §11.
+
+    Behaviour is derived from the batch seed rather than handed over, so the
+    executor never needs the whole `GeneratedCase` — and the agent never sees
+    the behaviour that produced the words, only the words.
+    """
+    from settle.sim.debtors import reply, reply_text
+
+    behaviour = behaviour_for(world.streams.master_seed, case.case_id)
+    spoken = reply(
+        case.case_id, world.truth, behaviour, state.contacts_used, state.tick, world.streams
+    )
+    return reply_text(spoken, case.case_id, state.tick, world.streams) or None
+
+
 def execute(
     action: Action,
     case: ObservedCase,
@@ -78,7 +94,8 @@ def execute(
 
     if not is_debit(action):
         return ReportedOutcome(
-            case_id=case.case_id, at=at, status=ReportedStatus.NONE, arrival_count=1
+            case_id=case.case_id, at=at, status=ReportedStatus.NONE, arrival_count=1,
+            reply_text=_reply_for(case, state, world),
         )
 
     result = attempt(case, world.truth, action, at, state.tick, world.streams)

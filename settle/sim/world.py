@@ -18,7 +18,7 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict
 
 from settle.schema.action import Action, Retry, SendMessage, SwitchRail, VoiceCall
-from settle.schema.enums import ActionType
+from settle.schema.enums import ActionType, IntentType
 from settle.schema.observed import ObservedCase
 from settle.sim.generator import PARAMS
 from settle.sim.streams import Streams
@@ -170,3 +170,54 @@ def reversal_at(
     """
     roll = streams.value(case.case_id, "reversal_roll", tick)
     return settled_at + timedelta(days=1 + int(roll * max_delay_days))
+
+
+# ---------------------------------------------------------------------------
+# Natural recovery. SPEC §14.3, A77.
+# ---------------------------------------------------------------------------
+
+def natural_recovery_probability(intent: IntentType) -> float:
+    """P(this case cures itself within the window), by intent."""
+    return PARAMS[f"natural_recovery.{intent.value}"]
+
+
+def natural_recovery_day(case: ObservedCase, streams: Streams) -> int:
+    """When the self-cure lands, if it does."""
+    roll = streams.value(case.case_id, "natural_recovery_day", 0)
+    return 1 + int(roll * PARAMS["natural_recovery.max_day"])
+
+
+def natural_recovery(
+    case: ObservedCase, truth: HiddenTruth, tick: int, streams: Streams
+) -> bool:
+    """Has the case cured itself by `tick`, with no arm involved?
+
+    The customer notices the failed debit and tops up, or pays through another
+    route. Nobody contacted them.
+
+    Both draws are addressed at tick 0 and read from a stream shared by every
+    arm, so the self-cure is the *same event* whatever the arm did. That is what
+    makes §14.3's subtraction mean anything: a case that recovers under B0 is
+    not counted for any other arm, and it can only be excluded if it is
+    identifiably the same case curing itself.
+
+    Without this path B0 recovers nothing, incremental equals gross, and
+    `do_nothing` has no positive expected value for any case — which puts the
+    contact-restraint result out of reach by construction.
+    """
+    if streams.value(case.case_id, "natural_recovery_draw", 0) >= natural_recovery_probability(
+        truth.intent_type
+    ):
+        return False
+    return tick >= natural_recovery_day(case, streams) * 24
+
+
+def natural_recovery_at(
+    case: ObservedCase, truth: HiddenTruth, streams: Streams
+) -> datetime | None:
+    """When the self-cure lands, or None if this case never cures itself."""
+    if streams.value(case.case_id, "natural_recovery_draw", 0) >= natural_recovery_probability(
+        truth.intent_type
+    ):
+        return None
+    return case.created_at + timedelta(days=natural_recovery_day(case, streams))

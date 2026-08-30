@@ -31,7 +31,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from settle.schema.enums import ReportedStatus
 from settle.schema.outcome import ReportedOutcome
-from settle.sim.streams import Streams, derive_unit_float
+from settle.sim.streams import Streams
 from settle.sim.truth import ActualOutcome
 
 REPORTING_PARAMETERS: Final[tuple[str, ...]] = (
@@ -135,10 +135,7 @@ def report(
 
     # Out of order: the report is stamped before an event that preceded it, so a
     # consumer sorting by `at` reconstructs the wrong sequence.
-    # §14.2's named stream list has `webhook_drop` and `webhook_dup` but not
-    # `out_of_order`, and `streams.py` closes that list deliberately. Drawn from
-    # its own address until the omission is fixed — see OQ-34.
-    if derive_unit_float(streams.master_seed, "out_of_order", case_id, tick) < config.out_of_order_rate:
+    if streams.value(case_id, "out_of_order", tick) < config.out_of_order_rate:
         reported_at = reported_at - timedelta(hours=OUT_OF_ORDER_SHIFT_HOURS)
 
     duplicated = (

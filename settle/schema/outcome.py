@@ -29,3 +29,8 @@ class ReportedOutcome(BaseModel):
     payment_id: str | None = None
     amount_paise: int | None = Field(default=None, ge=0)
     arrival_count: int = Field(ge=1)
+
+    # What the customer said back, if anything. The agent reads text, not
+    # intent: §11's classifier turns this into a verdict, and a hedged reply
+    # turns into nothing at all.
+    reply_text: str | None = None

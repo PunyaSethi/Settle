@@ -237,7 +237,12 @@ ReportedOutcome                  ActualOutcome (hidden)
   payment_id  str | null           settled_at  datetime | null
   amount_paise int | null          reversed  bool
   arrival_count int >= 1           amount_paise int | null
+  reply_text  str | null
 ```
+
+`reply_text` is what the customer said back, if anything. The agent reads text,
+never intent: §11's classifier turns it into a verdict, and a hedged reply turns
+into nothing at all.
 
 The agent reads `ReportedOutcome` only. Reconciliation compares the two.
 
@@ -550,6 +555,13 @@ horizon.
 Wrongly logging a brush-off as a promise suppresses contact for weeks and is a
 worse failure than missing a real promise.
 
+The deterministic classifier is `settle/text/classify.py`. It imports no client
+and makes no network call, and RPL-6 asserts it. Its `unclear` count is the LLM
+escalation rate, reported per run. An opt-out outranks every other reading in
+the same message — "already paid, stop messaging" is both a payment claim and an
+opt-out, and honouring the opt-out is the only reading where being wrong is not
+a compliance breach.
+
 STT: `gpt-transcribe`. Note: it returns Devanagari for Hindi speech regardless of
 the `language` parameter — that parameter steers recognition, not output script.
 All date and numeral parsing must accept both Latin and Devanagari.
@@ -695,13 +707,27 @@ webhook_drop      per reported outcome
 webhook_dup       per reported outcome
 reply_draw        per contact
 patience_draw     per contact
+out_of_order      per reported outcome
+natural_recovery_draw  per case
+natural_recovery_day   per case
 ```
+
+`out_of_order` and the natural-recovery pair are shared for the same reason as
+the rest. A reporting distortion drawn from a private address would differ
+between arms facing the same case, and a self-cure that differed between arms
+would make §14.3's subtraction compare two different events.
 
 ### 14.3 Incremental scoring
 
 A case that also recovers under B0 is **not counted**. Roughly a fifth of
 at-risk value returns on its own and counting it is the easiest way for a
 recovery product to flatter itself.
+
+Natural recovery is the mechanism that makes incremental scoring meaningful.
+Without it B0 recovers zero, incremental equals gross, and the definition
+protects nothing. It is also what gives `do_nothing` positive expected value:
+if inaction never recovers anything, every action dominates it and the
+contact-restraint result is unreachable by construction.
 
 This definition discards timing value. A case OURS recovers on day 3 and B0
 recovers on day 28 scores as zero, despite 25 days of avoided churn risk and a
@@ -927,6 +953,12 @@ Resolved inside the checkpoint that reaches them, not by further spec amendment.
 
 Resolved:
 
+- OQ-34 — `out_of_order` drew from its own address, so two arms could face
+  different reporting distortion on the same case. Resolved at CP6.1: it is a
+  named stream and the reporting layer reads only shared streams. OBS-3.
+- OQ-35 — SF-4 and SF-5 were unreachable without reply handling. Resolved at
+  CP6.1: replies are classified and applied, and both classes now occur from
+  real behaviour.
 - OQ-20 — `settlement_lag_reporting` and `reversal_reporting_delay` were
   declared and read by nothing. Resolved at CP6: all five reporting parameters
   are applied in `observability.report()`, and OBS-1 asserts each is read.
@@ -1057,3 +1089,5 @@ Resolved:
 - 2026-08-30 — A75: §10.1 — the estimator trains only on rows where the choice set had more than one member. Resolves OQ-33.
 - 2026-08-30 — A76: §7 — reconciliation runs at the 60-day observation horizon; censoring is reported, never guessed.
 - 2026-08-30 — A77: INV-8 names `settle/recon/` as its single exception, and §7 records why. Resolves OQ-20 and OQ-28.
+- 2026-08-30 — A78: §14.3 records natural recovery as the mechanism that makes incremental scoring meaningful; `world.natural_recovery` added with per-intent priors.
+- 2026-08-30 — A79: §5.5 `ReportedOutcome` carries `reply_text`; §11 records the deterministic classifier and the escalation rate it reports.

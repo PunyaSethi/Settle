@@ -56,7 +56,7 @@ Every step strictly increases the tick, so termination is guaranteed by S6
 regardless of what an arm does.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Final
 
 from settle.audit.chain import Ledger
@@ -77,12 +77,24 @@ from settle.schema.action import Action, Retry, SwitchRail
 from settle.schema.enums import ActionType, Actor, ArmMode, LedgerKind, Rail, ReportedStatus
 from settle.schema.observed import ObservedCase
 from settle.schema.outcome import ReportedOutcome
+from settle.text.classify import ReplyKind, ReplyVerdict, classify_reply
 from settle.schema.state import CaseState, CaseStatus, Scheduled, as_of
 
 # When the arm has chosen to do nothing and no timer is pending, it reconsiders
 # tomorrow. In POLICY_PARAMS with a PRIORS row (A68): it sets how many decisions
 # an arm gets across the horizon, and therefore contacts per case.
 DECISION_CADENCE_HOURS: Final[int] = int(POLICY_PARAMS["decision_cadence_hours"])
+
+# Reason codes the auditor keys on. SF-4 looks for PROMISE_LOGGED, SF-5 for
+# OPTED_OUT, so these strings are a contract with settle/recon/.
+_VERDICT_REASONS: Final[dict[ReplyKind, str]] = {
+    ReplyKind.OPT_OUT: "OPTED_OUT",
+    ReplyKind.DISPUTE: "DISPUTE_RAISED",
+    ReplyKind.PROMISE: "PROMISE_LOGGED",
+    ReplyKind.PAYMENT_CLAIM: "PAYMENT_CLAIMED",
+    ReplyKind.HEDGED: "REPLY_HEDGED",
+    ReplyKind.UNCLEAR: "REPLY_UNCLEAR",
+}
 
 # Termination is guaranteed by S6, but a bug in tick advancement would spin
 # forever rather than fail. This turns that into a loud error.
@@ -173,14 +185,42 @@ def _apply_dispatch(case: ObservedCase, state: CaseState, action: Action, key: s
     return updated
 
 
-def _apply_outcome(state: CaseState, outcome: ReportedOutcome) -> CaseState:
+def _apply_outcome(
+    case: ObservedCase, state: CaseState, outcome: ReportedOutcome
+) -> tuple[CaseState, ReplyVerdict | None]:
     """What a reported outcome is allowed to change.
 
     Not `settled`. INV-1 requires a settlement record, and a `captured` webhook
-    is an authorisation. Only reconciliation may set that field, which is why
-    S1 cannot fire from anything the runner sees.
+    is an authorisation. Only reconciliation may set that field.
+
+    A reply, however, changes the world the gates operate in — and it is the
+    only thing that does. Until CP6.1 nothing read the text the debtors were
+    already generating, so `opted_out` and `promise_date` were never set, G6 and
+    G7 could never fire on a real case, and SF-4 and SF-5 were unreachable
+    except by seeding.
     """
-    return state
+    if outcome.reply_text is None:
+        return state, None
+
+    verdict = classify_reply(outcome.reply_text, case.created_at.date())
+    if verdict.kind is ReplyKind.OPT_OUT:
+        return state.model_copy(update={"opted_out": True}), verdict
+    if verdict.kind is ReplyKind.DISPUTE:
+        return state.model_copy(update={"disputed": True}), verdict
+    if verdict.kind is ReplyKind.PROMISE and verdict.promise_date is not None:
+        return (
+            state.model_copy(
+                update={
+                    "promise_date": verdict.promise_date,
+                    "promise_logged_at": as_of(case.created_at, state),
+                }
+            ),
+            verdict,
+        )
+    # hedged, unclear, payment_claim — read, and deliberately acted on by
+    # setting nothing. §11: a brush-off logged as a promise suppresses contact
+    # for weeks, which is the worse failure.
+    return state, verdict
 
 
 def run_case(
@@ -234,7 +274,32 @@ def run_case(
             reason_code=f"REPORTED_{outcome.status.value.upper()}",
             arm=arm.name,
         )
-        return _apply_outcome(updated, outcome)
+
+        updated, verdict = _apply_outcome(case, updated, outcome)
+        if verdict is not None:
+            # Logged whether or not it changed anything. A reply that was read
+            # and deliberately ignored is a decision and belongs in the trace.
+            payload: dict = {
+                "kind": verdict.kind.value,
+                "confidence": verdict.confidence.value,
+                "matched_span": verdict.matched_span,
+                "changed_state": verdict.kind.value in ("opt_out", "dispute", "promise"),
+            }
+            reason = _VERDICT_REASONS[verdict.kind]
+            if verdict.promise_date is not None:
+                payload["promise_date"] = datetime.combine(
+                    verdict.promise_date, time.min, tzinfo=case.created_at.tzinfo
+                ).isoformat()
+            ledger.append(
+                case_id=case.case_id,
+                at=as_of(case.created_at, current),
+                kind=LedgerKind.DECISION,
+                actor=Actor.SYSTEM,
+                payload=payload,
+                reason_code=reason,
+                arm=arm.name,
+            )
+        return updated
 
     for _ in range(MAX_STEPS_PER_CASE):
         # 1. stops

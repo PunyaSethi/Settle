@@ -97,3 +97,51 @@ def reply(
 
     spent = COMPLAINT_PATIENCE_COST if kind is ReplyKind.COMPLAINT else 1
     return Reply(kind=kind, promise_in_days=promise_in_days, patience_spent=spent)
+
+
+# The words a debtor actually sends. Deliberately messy Hinglish: the classifier
+# has to survive what a real inbox contains, not a canonical phrasing we chose to
+# be easy. A promise encodes its own horizon so the round trip is testable — the
+# debtor says "N din mein", the parser must recover N.
+_REPLY_TEXT: Final[dict[ReplyKind, tuple[str, ...]]] = {
+    ReplyKind.SILENCE: ("",),
+    ReplyKind.HEDGED: (
+        "Haan theek hai, dekhta hoon, baad mein baat karte hain",
+        "abhi thoda tight hai, try karunga",
+        "dekhte hain",
+        "ok will see",
+    ),
+    ReplyKind.PROMISE: (
+        "{n} din mein kar dunga",
+        "haan {n} din mein bhej dunga bhai",
+        "{n} din me ho jayega",
+    ),
+    ReplyKind.OPT_OUT: (
+        "Mujhe baar baar mat call kariye, main khud dekh lunga",
+        "STOP",
+        "please band karo ye messages",
+    ),
+    ReplyKind.DISPUTE: (
+        "ye galat charge hai maine nahi kiya",
+        "I want to dispute this",
+        "chargeback kar raha hoon",
+    ),
+    ReplyKind.COMPLAINT: (
+        "maine kar diya payment, ab mat pareshan karo",
+        "already paid, stop messaging",
+    ),
+}
+
+
+def reply_text(reply: Reply, case_id: str, tick: int, streams: Streams) -> str:
+    """Render a reply as the text the agent actually receives.
+
+    The debtor writes; §11's classifier reads. Keeping the two apart is what
+    makes the classifier testable against something it did not author.
+    """
+    bank = _REPLY_TEXT[reply.kind]
+    index = int(streams.value(case_id, "reply_draw", tick) * len(bank)) % len(bank)
+    template = bank[index]
+    if reply.kind is ReplyKind.PROMISE and reply.promise_in_days is not None:
+        return template.format(n=reply.promise_in_days)
+    return template

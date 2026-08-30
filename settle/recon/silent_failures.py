@@ -100,8 +100,12 @@ def sf5_dispatch_after_opt_out(view, record, case, config) -> bool:
             break
     if opted_out_at is None:
         return False
+    # Strictly after. The contact that *elicited* the opt-out shares its
+    # timestamp — the reply arrives in the same tick as the message that
+    # prompted it — and counting it would report every opt-out as a breach of
+    # the rule the opt-out just created.
     return any(
-        entry.at >= opted_out_at and entry.payload["action"]["type"] in CONTACT_VERBS
+        entry.at > opted_out_at and entry.payload["action"]["type"] in CONTACT_VERBS
         for entry in view.dispatches
     )
 

@@ -66,14 +66,14 @@ def _imports(path: Path) -> set[str]:
 # --------------------------------------------------------------------------
 
 def test_REC_1_one_record_per_case_always(b2_run):
-    entries, actuals, cases, _, _ = b2_run
+    entries, actuals, cases, _, _, truths, streams = b2_run
     reconciled = reconcile(entries, actuals, cases)
     assert set(reconciled) == set(cases)
     assert len(reconciled) == CASES
 
 
 def test_REC_1_a_case_that_never_acted_still_gets_a_record():
-    entries, actuals, cases, _, _ = run_arm("b0", 50, SEED)
+    entries, actuals, cases, _, _, truths, streams = run_arm("b0", 50, SEED)
     reconciled = reconcile(entries, actuals, cases)
     assert len(reconciled) == 50
     assert all(not r.ledger_says_recovered and not r.actually_settled for r in reconciled.values())
@@ -82,7 +82,7 @@ def test_REC_1_a_case_that_never_acted_still_gets_a_record():
 def test_REC_2_belief_and_truth_diverge(b3_run):
     """The distance between the two is the project. If they never diverged,
     §6's observability layer would not be doing anything."""
-    entries, actuals, cases, _, _ = b3_run
+    entries, actuals, cases, _, _, truths, streams = b3_run
     reconciled = reconcile(entries, actuals, cases)
 
     believed_not_settled = [
@@ -102,7 +102,7 @@ def test_REC_2_belief_and_truth_diverge(b3_run):
 def test_REC_3_an_outcome_past_the_horizon_is_censored_not_guessed(b2_run):
     from settle.sim.truth import ActualOutcome
 
-    entries, actuals, cases, _, _ = b2_run
+    entries, actuals, cases, _, _, truths, streams = b2_run
     case_id = next(iter(cases))
     case = cases[case_id]
     late = case.created_at + timedelta(days=OBSERVATION_HORIZON_DAYS + 5)
@@ -125,8 +125,8 @@ def test_REC_3_an_outcome_past_the_horizon_is_censored_not_guessed(b2_run):
 def test_REC_3_the_censored_fraction_is_reported_per_arm():
     """A27 required this rather than a silent right-censor."""
     for arm_key in ("b1", "b2", "b3"):
-        entries, actuals, cases, name, _ = run_arm(arm_key, 200, SEED)
-        reconciled = reconcile(entries, actuals, cases)
+        entries, actuals, cases, name, _, truths, streams = run_arm(arm_key, 200, SEED)
+        reconciled = reconcile(entries, actuals, cases, truths=truths, streams=streams)
         fraction = censored_fraction(reconciled)
         assert 0.0 <= fraction <= 1.0, (name, fraction)
 
@@ -146,7 +146,7 @@ def test_REC_3_the_sixty_day_horizon_is_wide_enough_for_the_declared_maxima():
 # --------------------------------------------------------------------------
 
 def test_REC_4_a_reversal_after_settlement_is_detected(b3_run):
-    entries, actuals, cases, _, _ = b3_run
+    entries, actuals, cases, _, _, truths, streams = b3_run
     reconciled = reconcile(entries, actuals, cases)
     reversed_cases = [r for r in reconciled.values() if r.reversed]
     assert reversed_cases, "no reversal was detected, so SF-7 is untestable"
@@ -228,8 +228,8 @@ def test_REC_7_reconciliation_is_byte_identical_across_processes(tmp_path):
     script = (
         "import json;"
         "from settle.recon.reconcile import reconcile, run_arm;"
-        "e, a, c, n, m = run_arm('b2', 60, 42);"
-        "r = reconcile(e, a, c);"
+        "e, a, c, n, m, t, st = run_arm('b2', 60, 42);"
+        "r = reconcile(e, a, c, truths=t, streams=st);"
         "print(json.dumps({k: v.model_dump(mode='json') for k, v in sorted(r.items())},"
         " sort_keys=True))"
     )
@@ -277,7 +277,7 @@ def test_REC_9_labels_cover_exactly_the_trainable_rows():
     """A75: a row where `do_nothing` was the only option is not a decision."""
     from settle.runner.arms.explore import ExploreArm
 
-    entries, actuals, cases, _, _ = run_arm("explore", 300, 90_000)
+    entries, actuals, cases, _, _, truths, streams = run_arm("explore", 300, 90_000)
     reconciled = reconcile(entries, actuals, cases)
 
     arm = ExploreArm(90_000)
@@ -346,7 +346,7 @@ def test_OBS_1_every_reporting_parameter_is_read_by_some_code_path():
 
 
 def test_OBS_1_the_distortions_actually_happen(b3_run):
-    entries, _, _, _, _ = b3_run
+    entries, _, _, _, _, _, _ = b3_run
     from settle.schema.enums import LedgerKind
 
     reported = [e for e in entries if e.kind is LedgerKind.REPORTED_OUTCOME]
@@ -404,8 +404,41 @@ def test_OBS_2_sf1_is_still_producible_under_perfect_observability():
 def test_OBS_2_compliance_classes_are_zero_for_every_enforce_arm():
     """SF-5 and SF-6 for an ENFORCE arm are a gate failure, not an audit finding."""
     for arm_key in ("b0", "b1", "b2", "explore"):
-        entries, actuals, cases, name, mode = run_arm(arm_key, 200, SEED if arm_key != "explore" else 90_000)
+        entries, actuals, cases, name, mode, truths, streams = run_arm(arm_key, 200, SEED if arm_key != "explore" else 90_000)
         assert mode is ArmMode.ENFORCE
         counts = failure_counts(reconcile(entries, actuals, cases))
         breaches = {c.value: counts[c] for c in COMPLIANCE_CLASSES if counts[c]}
         assert not breaches, f"{name} is in ENFORCE and shows {breaches} — a gate did not hold"
+
+
+# --------------------------------------------------------------------------
+# OBS-3 — the reporting layer is shared, not per-arm (Part C, OQ-34)
+# --------------------------------------------------------------------------
+
+def test_OBS_3_two_arms_at_the_same_tick_see_the_same_reporting_draws():
+    """Every reporting draw now comes from the shared indexed stream space.
+
+    `out_of_order` previously drew from its own address, so two arms reaching
+    the same case at the same tick could face different distortion — which
+    makes the difference between them partly luck rather than policy, and is
+    exactly what common random numbers exist to prevent.
+    """
+    from settle.sim.streams import STREAM_NAMES, Streams
+
+    for name in ("webhook_drop", "webhook_dup", "out_of_order", "natural_recovery_draw"):
+        assert name in STREAM_NAMES, f"{name} is not a shared stream"
+
+    first, second = Streams(42), Streams(42)
+    for case_id in ("case_000001", "case_000042"):
+        for tick in (0, 7, 31, 200):
+            for name in ("webhook_drop", "webhook_dup", "out_of_order"):
+                assert first.value(case_id, name, tick) == second.value(case_id, name, tick)
+
+
+def test_OBS_3_the_reporting_layer_reads_only_shared_streams():
+    source = (REPO_ROOT / "settle" / "sim" / "observability.py").read_text(encoding="utf-8")
+    assert "derive_unit_float" not in source, (
+        "the reporting layer is drawing from its own address again, so two arms "
+        "can face different distortion on the same case"
+    )
+    assert 'streams.value(case_id, "out_of_order"' in source

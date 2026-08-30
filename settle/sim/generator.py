@@ -196,6 +196,19 @@ PARAMS: Final[dict[str, float]] = {
     "p_authorise.dnd_contact_penalty": 0.6,
     "p_authorise.day_window_start_hour": 9.0,
     "p_authorise.day_window_end_hour": 20.0,
+    # --- natural recovery (§14.3, A77) ---
+    # P(the case cures itself within the observation window, no arm involved).
+    # Conditioned on intent: someone willing and able notices the failed debit
+    # and pays; someone churned does not. Without this B0 recovers zero,
+    # incremental equals gross, and `do_nothing` has no positive expected value
+    # for any case — which makes contact restraint unreachable by construction.
+    "natural_recovery.willing_able": 0.45,
+    "natural_recovery.willing_broke": 0.18,
+    "natural_recovery.disputing": 0.05,
+    "natural_recovery.churned": 0.01,
+    "natural_recovery.adversarial": 0.03,
+    # A self-cure lands somewhere in the first N days; the draw picks when.
+    "natural_recovery.max_day": 45.0,
     # --- liquidity window (§9 time_shiftable) ---
     # How many days before payday still counts as "money is about to be there".
     # The highest-leverage number in the world model: it decides how often a
@@ -447,6 +460,17 @@ def generate_case(seed: int, index: int) -> GeneratedCase:
         decline_class=decline_class,
         escalation_eligible=escalation_eligible,
     )
+
+
+def behaviour_for(seed: int, case_id: str) -> DebtorBehaviour:
+    """The debtor behaviour this case was generated with. SPEC §8.
+
+    A pure function of `(seed, case_id)`, drawn at the same address the
+    generator used. Exposed so the executor can obtain it without being handed
+    the whole `GeneratedCase` — behaviour drives replies, and a reply is
+    something the world produces, not something the agent may look up.
+    """
+    return DebtorBehaviour(pick_from_mix("behaviour_mix", draw(seed, case_id, "behaviour")))
 
 
 def _payday(u_kind: float, u_uniform: float) -> int:

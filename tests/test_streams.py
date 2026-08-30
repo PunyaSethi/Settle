@@ -180,5 +180,10 @@ def test_STR_4_out_of_range_addresses_are_refused():
 
 def test_STR_4_every_named_stream_declares_its_tick_unit():
     assert set(STREAM_TICK_UNITS) == set(STREAM_NAMES)
-    assert len(STREAM_NAMES) == 7
+    assert len(STREAM_NAMES) == 10
     assert all(unit.startswith("per ") for unit in STREAM_TICK_UNITS.values())
+    # CP6.1 added three. `out_of_order` was drawing from its own address, which
+    # weakened CRN for one reporting parameter; the natural-recovery pair has to
+    # be shared or §14.3's subtraction compares different self-cures.
+    for added in ("out_of_order", "natural_recovery_draw", "natural_recovery_day"):
+        assert added in STREAM_NAMES

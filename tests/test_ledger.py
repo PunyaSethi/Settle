@@ -262,13 +262,20 @@ def _imports(path: Path) -> set[str]:
     return found
 
 
-def test_EXE_1_the_executor_is_the_only_module_that_touches_the_world():
+# The executor is the only module that *acts* on the world. `settle/recon/`
+# reads one pure function from it — `natural_recovery_at`, a self-cure that
+# happened whatever any arm did — which is a different thing from dispatching,
+# and the auditor cannot report B0's recovery without it.
+WORLD_READERS = {"settle/execute/executor.py", "settle/recon/reconcile.py"}
+
+
+def test_EXE_1_the_executor_is_the_only_module_that_acts_on_the_world():
     """Everything upstream is a pure function of its arguments. Keeping the
-    boundary in one module is what makes the rest replayable."""
+    dispatch boundary in one module is what makes the rest replayable."""
     offenders = {}
     for module_path in sorted((REPO_ROOT / "settle").rglob("*.py")):
         relative = str(module_path.relative_to(REPO_ROOT))
-        if relative == "settle/execute/executor.py":
+        if relative in WORLD_READERS:
             continue
         if any(name.startswith("settle.sim.world") for name in _imports(module_path)):
             offenders[relative] = "imports settle.sim.world"
@@ -278,6 +285,10 @@ def test_EXE_1_the_executor_is_the_only_module_that_touches_the_world():
         name.startswith("settle.sim.world")
         for name in _imports(REPO_ROOT / "settle" / "execute" / "executor.py")
     ), "the executor should be the module that does touch the world"
+
+    recon_source = (REPO_ROOT / "settle" / "recon" / "reconcile.py").read_text(encoding="utf-8")
+    assert "natural_recovery_at" in recon_source
+    assert "attempt(" not in recon_source, "reconciliation must not run actions"
 
 
 def test_EXE_2_the_idempotency_key_is_built_before_the_audit_entry_is_written():

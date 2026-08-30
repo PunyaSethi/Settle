@@ -1,0 +1,32 @@
+# CP6.1 — natural recovery, reply consumption, and the shared reporting streams.
+
+SPEC.md
+PRIORS.md
+settle/sim/world.py
+settle/sim/debtors.py
+settle/sim/streams.py
+settle/sim/generator.py
+settle/text/__init__.py
+settle/text/classify.py
+settle/runner/case_runner.py
+settle/schema/state.py
+settle/recon/reconcile.py
+settle/recon/silent_failures.py
+tests/test_world.py
+tests/test_replies.py
+tests/test_recon.py
+checkpoints/cp6_1.allowlist
+
+# --- outside the stated allowlist, and why --------------------------------
+# Part B says "on a ReportedOutcome carrying a reply". Nothing carried one.
+settle/schema/outcome.py
+# The executor is where the world produces a reply, and where the five
+# reporting parameters are applied before the runner sees anything.
+settle/execute/executor.py
+# Part C moves out_of_order into the shared stream space; the draw lives here.
+settle/sim/observability.py
+# EXE-1 pinned the world-reader set to one module; reconciliation now reads one
+# pure function (natural_recovery_at) to report B0's self-cures.
+tests/test_ledger.py
+# STR-4 pinned the stream count at 7. Part C adds three.
+tests/test_streams.py

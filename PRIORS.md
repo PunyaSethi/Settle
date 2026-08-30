@@ -137,6 +137,12 @@ Read by the generator or world to draw a value.
 | p_authorise.dnd_contact_penalty | 0.6 | ASSERTED | 2026-08-27 | pending D4 |
 | p_authorise.day_window_start_hour | 9 | ASSERTED | 2026-08-27 | pending D4 |
 | p_authorise.day_window_end_hour | 20 | ASSERTED | 2026-08-27 | pending D4 |
+| natural_recovery.willing_able | 0.45 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
+| natural_recovery.willing_broke | 0.18 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
+| natural_recovery.disputing | 0.05 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
+| natural_recovery.churned | 0.01 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
+| natural_recovery.adversarial | 0.03 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
+| natural_recovery.max_day | 45 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
 | world.liquidity_window_days | 1 | ASSERTED | 2026-08-27 | REQUIRED in the D4 sweep — highest-leverage parameter in the world model. It determines how often a time_shiftable retry lands inside the liquidity window, which is the mechanism the retry-timing result depends on. Must be swept in D4 sensitivity, and the range over which the conclusion survives reported explicitly. |
 
 ### Asserted targets
