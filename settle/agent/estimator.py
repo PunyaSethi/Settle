@@ -77,8 +77,8 @@ def split_by_case(case_ids: Sequence[str], seed: int = RANDOM_STATE) -> tuple[Sp
     )
 
 
-def build_matrix(rows: Sequence[tuple[ObservedCase, Action, int]]) -> np.ndarray:
-    return np.asarray([feature_vector(case, action, tick) for case, action, tick in rows])
+def build_matrix(rows: Sequence[tuple]) -> np.ndarray:
+    return np.asarray([feature_vector(*row) for row in rows])
 
 
 def fit_gbm(X: np.ndarray, y: np.ndarray, X_cal: np.ndarray, y_cal: np.ndarray):
@@ -114,9 +114,11 @@ class Estimator:
         self.model = model
         self.name = name
 
-    def predict_proba(self, case: ObservedCase, action: Action, tick: int) -> float:
+    def predict_proba(
+        self, case: ObservedCase, action: Action, tick: int, last_attempt_tick: int | None = None
+    ) -> float:
         """P(settle | case, action, hour). SPEC §10.1."""
-        X = np.asarray([feature_vector(case, action, tick)])
+        X = np.asarray([feature_vector(case, action, tick, last_attempt_tick)])
         return float(self.model.predict_proba(X)[0, 1])
 
     def predict_many(self, X: np.ndarray) -> np.ndarray:

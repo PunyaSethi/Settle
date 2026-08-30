@@ -53,30 +53,65 @@ def load_rows(explore_path: Path, labels_path: Path, cases_path: Path):
             case = ObservedCase.model_validate_json(line)
             cases[case.case_id] = case
 
-    rows, ys, case_ids, actions, ticks = [], [], [], [], []
+    # The tick of the previous debit on each case, reconstructed from the
+    # decision stream in order. Not hidden truth: a merchant knows when it last
+    # tried to charge someone.
+    last_debit: dict[str, int] = {}
+    debit_verbs = {"retry", "switch_rail"}
+
+    rows, ys, case_ids = [], [], []
     for line in explore_path.read_text().splitlines():
         if not line.strip():
             continue
         decision = Decision.model_validate_json(line)
-        label = labels.get(decision.decision_id)
-        if label is None:
-            continue
-        case = cases.get(decision.case_id)
-        if case is None:
-            continue
         tick = int(decision.decision_id.split(":")[1])
-        rows.append((case, decision.action, tick))
+        previous = last_debit.get(decision.case_id)
+        if decision.action.type.value in debit_verbs:
+            last_debit[decision.case_id] = tick
+
+        label = labels.get(decision.decision_id)
+        case = cases.get(decision.case_id)
+        if label is None or case is None:
+            continue
+        rows.append((case, decision.action, tick, previous))
         ys.append(int(label["settled"]))
         case_ids.append(decision.case_id)
-        actions.append(decision.action)
-        ticks.append(tick)
     return rows, np.asarray(ys), case_ids
 
 
-def cell_for(case: ObservedCase, action: Action, tick: int) -> tuple:
+def cell_for(case: ObservedCase, action: Action, tick: int, last_attempt: int | None = None) -> tuple:
     """(action_type, hour_bucket, decline_class) — the coverage cell."""
     at = dispatch_moment(case, action, tick).astimezone(IST)
     return (action.type.value, at.hour // 4, classify(case.decline_code).value)
+
+
+def _feature_importance(model, X_test, y_test, sample: int = 3000) -> None:
+    """Permutation importance, model-agnostic. Answers "which did it use", not
+    "which does it have a coefficient for"."""
+    from sklearn.inspection import permutation_importance
+
+    from settle.agent.features import FEATURE_NAMES
+
+    n = min(sample, len(y_test))
+    result = permutation_importance(
+        model.model, X_test[:n], y_test[:n], n_repeats=5, random_state=0, scoring="neg_brier_score"
+    )
+    ranked = sorted(zip(FEATURE_NAMES, result.importances_mean), key=lambda kv: -kv[1])
+    timing = (
+        "day_of_month_at_dispatch",
+        "days_to_month_start",
+        "in_liquidity_window",
+        "days_since_last_attempt",
+    )
+    print(f"\nfeature importance (permutation, neg-Brier, n={n:,})")
+    print("  top 8 overall")
+    for name, value in ranked[:8]:
+        print(f"    {name:<28}{value:>+10.5f}")
+    print("  the four timing features")
+    lookup = dict(ranked)
+    for name in timing:
+        rank = [n for n, _ in ranked].index(name) + 1
+        print(f"    {name:<28}{lookup[name]:>+10.5f}   rank {rank}/{len(ranked)}")
 
 
 def _timing_spread(model, rows, test_rows) -> None:
@@ -90,11 +125,11 @@ def _timing_spread(model, rows, test_rows) -> None:
     spreads = []
     worked = None
     for index in test_rows[:4000]:
-        case, action, tick = rows[index]
+        case, action, tick, last_attempt = rows[index]
         if not isinstance(action, Retry):
             continue
         probs = [
-            model.predict_proba(case, Retry(at_hour_offset=o, rail=action.rail), tick)
+            model.predict_proba(case, Retry(at_hour_offset=o, rail=action.rail), tick, last_attempt)
             for o in offsets
         ]
         spreads.append(max(probs) - min(probs))
@@ -144,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     cells = [cell_for(*rows[i]) for i in test.rows]
     constant = constant_rate_baseline(ytr)
+    do_nothing_mask = np.asarray([rows[i][1].type.value == "do_nothing" for i in test.rows])
 
     results = {}
     print(f"\n{'model':<10} {'ECE':>8} {'Brier':>8} {'ECE(all)':>9} {'Brier(all)':>11}")
@@ -154,9 +190,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{name:<10} {stats['ece']:>8.4f} {stats['brier']:>8.4f} "
               f"{stats['ece_all']:>9.4f} {stats['brier_all']:>11.4f}")
 
-    from settle.agent.calibration import brier_score
+    from settle.agent.calibration import brier_score, expected_calibration_error
     constant_brier = brier_score([constant] * len(yte), yte.tolist())
     print(f"{'CONSTANT':<10} {'—':>8} {constant_brier:>8.4f}  (base rate {constant:.4f})")
+
+    # §10.2 subtracts p_settle(do_nothing) from every action, so a miscalibrated
+    # do_nothing term poisons every EV the policy computes. Reported separately.
+    print(f"\ndo_nothing rows only (A82: the term every EV subtracts)")
+    print(f"  {'model':<6}{'n':>8}{'ECE':>9}{'Brier':>9}{'base':>8}")
+    for name, (_, p, _) in results.items():
+        pn, yn = p[do_nothing_mask].tolist(), yte[do_nothing_mask].tolist()
+        print(f"  {name:<6}{len(pn):>8,}{expected_calibration_error(pn, yn):>9.4f}"
+              f"{brier_score(pn, yn):>9.4f}{np.mean(yn):>8.4f}")
 
     winner = min(results, key=lambda n: results[n][2]["ece"])
     model, p_win, stats = results[winner]
@@ -184,6 +229,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"    {action:<22} {bucket*4:02d}-{bucket*4+3:02d}  {cls:<16} n={row['n']:>3}")
     if len(thin) > 12:
         print(f"    ... and {len(thin) - 12} more")
+
+    # Which features the model actually used, on the timing question.
+    _feature_importance(model, Xte, yte)
 
     # EST-9 — does the probability move with the offset at all?
     print(f"\ntiming signal ({winner}) — same case, same verb, eight offsets")

@@ -27,7 +27,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
-from typing import Final
+from typing import Final, Iterable
 
 DEVANAGARI_DIGITS: Final[dict[str, str]] = {
     "०": "0", "१": "1", "२": "2", "३": "3", "४": "4",
@@ -251,3 +251,33 @@ def escalation_rate(verdicts: list[ReplyVerdict]) -> float:
     if not verdicts:
         return 0.0
     return sum(1 for v in verdicts if v.kind is ReplyKind.UNCLEAR) / len(verdicts)
+
+
+# ---------------------------------------------------------------------------
+# The escalation seam. SPEC §11.
+# ---------------------------------------------------------------------------
+
+def escalation_key(text: str) -> str:
+    """Cache key for an escalated reply: a hash of the text, nothing else.
+
+    Keyed on `case_id` or `decision_id` the cache never hits — every case has
+    its own key and 30,000 cases mean 30,000 calls. Keyed on the text it hits
+    almost always, because debtors draw from a finite phrase bank and the whole
+    corpus collapses to a few dozen distinct strings.
+
+    The difference is the entire LLM budget. At the measured 72.2% escalation
+    rate a 30k run escalates roughly 19,000 replies; keyed on text that is a few
+    dozen calls, and the distinct-text count is the true ceiling on spend for
+    the project.
+
+    Normalised first, so Devanagari and Latin numerals for the same date do not
+    occupy two cache slots.
+    """
+    import hashlib
+
+    return hashlib.sha256(normalise(text).strip().lower().encode("utf-8")).hexdigest()[:32]
+
+
+def distinct_texts(texts: Iterable[str]) -> int:
+    """How many cache slots a corpus actually needs."""
+    return len({escalation_key(t) for t in texts if t and t.strip()})

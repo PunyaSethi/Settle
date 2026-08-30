@@ -172,11 +172,11 @@ def test_EST_9_the_probability_varies_with_the_offset(trained, capsys):
     spreads = []
     example = None
     for index in test.rows[:3000]:
-        case, action, tick = rows[index]
+        case, action, tick, last_attempt = rows[index]
         if not isinstance(action, Retry):
             continue
         probs = [
-            lr.predict_proba(case, Retry(at_hour_offset=o, rail=action.rail), tick)
+            lr.predict_proba(case, Retry(at_hour_offset=o, rail=action.rail), tick, last_attempt)
             for o in offsets
         ]
         spreads.append(max(probs) - min(probs))
@@ -256,3 +256,109 @@ def test_EST_10_the_labels_come_from_reconciliation_not_reporting():
     assert "ReportedOutcome" not in body
     assert "arrival_count" not in body
     assert "status" not in body
+
+
+# --------------------------------------------------------------------------
+# EXP-7 — oversampling must not lie about the propensity
+# --------------------------------------------------------------------------
+
+class DoNothingProbe:
+    """Stands in for `do_nothing` when priming the coverage counter."""
+
+    from settle.schema.enums import ActionType as _AT
+
+    type = _AT.DO_NOTHING
+
+
+def test_EXP_7_the_logged_propensity_is_the_actual_sampling_probability():
+    """The contract oversampling could break. If the draw is weighted while the
+    log still claims `1/len(passing)`, every IPS estimate is wrong — and wrong
+    in the direction of whichever cell we chose to boost.
+    """
+    from settle.runner.arms.explore import ExploreArm, gate_passing_pairs
+    from settle.schema.enums import ArmMode
+    from settle.schema.state import CaseState
+    from settle.sim.generator import generate_batch
+
+    arm = ExploreArm(90_000, oversample=True)
+    batch = generate_batch(400, 90_000)
+
+    # Prime the counter so some cells are already at target and others are not.
+    # With an empty counter every cell is under target, every weight is equal,
+    # and the draw is uniform — the weighting only bites once cells fill, which
+    # is worth exercising rather than assuming.
+    from settle.runner.arms.explore import coverage_cell
+
+    seeded_case = batch.cases[0].observed
+    arm.cell_counts[coverage_cell(seeded_case, DoNothingProbe(), 0)] = 10_000
+
+    checked = weighted = 0
+    for generated in batch.cases:
+        case = generated.observed
+        for tick in (0, 5, 9, 14, 26, 40, 74):
+            state = CaseState(case_id=case.case_id, arm="EXPLORE", arm_mode=ArmMode.ENFORCE, tick=tick)
+            passing = gate_passing_pairs(case, state)
+            if not passing:
+                continue
+            weights = arm._weights(case, state, passing)
+            before = len(arm.decisions)
+            chosen = arm.choose(case, state, [])
+            logged = arm.decisions[before].propensity
+
+            expected = weights[passing.index(chosen)] / sum(weights)
+            assert logged == pytest.approx(expected), (case.case_id, tick, logged, expected)
+            if len(set(weights)) > 1:
+                weighted += 1
+                assert logged != pytest.approx(1.0 / len(passing)), (
+                    "a weighted draw still logged a uniform propensity"
+                )
+            checked += 1
+    assert checked > 500
+    assert weighted > 0, "no draw was ever actually weighted, so the test proves nothing"
+
+
+def test_EXP_7_propensity_matches_the_realised_frequency_per_cell():
+    """The statistical version: over many draws with the same weights, the
+    fraction of times an action is chosen matches the propensity it logged."""
+    import collections
+
+    from settle.runner.arms.explore import ExploreArm, gate_passing_pairs
+    from settle.schema.enums import ArmMode
+    from settle.schema.state import CaseState
+    from settle.sim.generator import generate_batch
+
+    arm = ExploreArm(90_000, oversample=False)  # uniform, so the target is exact
+    batch = generate_batch(3_000, 90_000)
+    chosen_counts: collections.Counter = collections.Counter()
+    logged: dict[int, float] = {}
+    trials = 0
+    for generated in batch.cases:
+        case = generated.observed
+        for tick in (9, 11, 13):
+            state = CaseState(
+                case_id=case.case_id, arm="EXPLORE", arm_mode=ArmMode.ENFORCE, tick=tick
+            )
+            passing = gate_passing_pairs(case, state)
+            if len(passing) != 5:
+                continue
+            before = len(arm.decisions)
+            chosen = arm.choose(case, state, [])
+            index = passing.index(chosen)
+            chosen_counts[index] += 1
+            logged[index] = arm.decisions[before].propensity
+            trials += 1
+
+    assert trials > 200, f"only {trials} five-option decisions to test against"
+    for index, count in chosen_counts.items():
+        realised = count / trials
+        assert abs(realised - logged[index]) < 0.06, (index, realised, logged[index])
+
+
+def test_EXP_7_oversampling_actually_shifts_the_distribution():
+    """If it did not, the propensity question would be moot and so would Part B."""
+    from settle.runner.arms.explore import ExploreArm
+
+    plain = ExploreArm(90_000, oversample=False)
+    boosted = ExploreArm(90_000, oversample=True)
+    assert plain.oversample is False and boosted.oversample is True
+    assert boosted.target > 0

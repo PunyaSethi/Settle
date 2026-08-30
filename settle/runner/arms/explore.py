@@ -31,6 +31,8 @@ code rather than trusted to a comment. Training on the same seeds the model is
 evaluated on is not a held-out set, it is a memorisation test.
 """
 
+from collections import Counter
+from datetime import timedelta, timezone
 from typing import Final
 
 from settle.policy.gates import evaluate_gates
@@ -53,6 +55,14 @@ assert not (set(EVALUATION_SEED_RANGE) & set(EXPLORE_SEED_RANGE)), (
 )
 
 EXPLORE_ADDRESS: Final[str] = "explore_draw"
+
+IST: Final = timezone(timedelta(hours=5, minutes=30))
+
+# Rows per (verb, 4h bucket, decline class) cell before it stops being boosted.
+# Matches the calibration threshold: a cell under it is EXTRAPOLATED and
+# excluded from the headline figures, so it is exactly the cell worth buying.
+TARGET_CELL_ROWS: Final[int] = 200
+OVERSAMPLE_WEIGHT: Final[float] = 6.0
 
 
 def is_explore_seed(seed: int) -> bool:
@@ -102,13 +112,38 @@ def gate_passing_pairs(case: ObservedCase, state: CaseState) -> list[Action]:
     ]
 
 
+def coverage_cell(case: ObservedCase, action: Action, tick: int) -> tuple:
+    """The cell coverage is measured in: (verb, 4h IST bucket, decline class).
+
+    Computed at the *dispatch* hour, so a retry scheduled 48 hours out counts
+    toward the cell it will actually land in rather than the one it was chosen
+    in. Anything else would report coverage for a hour the action never touches.
+    """
+    from settle.diagnose.taxonomy import classify
+
+    at = (case.created_at + timedelta(hours=tick + _offset(action))).astimezone(IST)
+    return (action.type.value, at.hour // 4, classify(case.decline_code).value)
+
+
+def _offset(action: Action) -> int:
+    return action.at_hour_offset if isinstance(action, Retry) else 0
+
+
 class ExploreArm:
-    """Uniform over gate-passing pairs, with the propensity logged at draw time."""
+    """Uniform over gate-passing pairs, with the propensity logged at draw time.
+
+    With `oversample`, the draw is weighted toward cells that are still thin.
+    The propensity logged is then the **actual** sampling probability, not
+    `1/len(passing)`. That distinction is the whole contract: if oversampling
+    shifted the distribution while the log still claimed uniform, every IPS
+    estimate built on it would be wrong, and wrong in the direction of whichever
+    cell we boosted.
+    """
 
     name = "EXPLORE"
     mode = ArmMode.ENFORCE
 
-    def __init__(self, seed: int) -> None:
+    def __init__(self, seed: int, oversample: bool = False, target: int = TARGET_CELL_ROWS) -> None:
         if not is_explore_seed(seed):
             raise ValueError(
                 f"seed {seed} is outside EXPLORE_SEED_RANGE {EXPLORE_SEED_RANGE.start}.."
@@ -116,7 +151,21 @@ class ExploreArm:
                 "held-out set, it is a memorisation test."
             )
         self.seed = seed
+        self.oversample = oversample
+        self.target = target
+        self.cell_counts: Counter = Counter()
         self.decisions: list[Decision] = []
+
+    def _weights(self, case: ObservedCase, state: CaseState, passing: list[Action]) -> list[float]:
+        """One weight per candidate. Uniform unless a cell is under target."""
+        if not self.oversample:
+            return [1.0] * len(passing)
+        return [
+            OVERSAMPLE_WEIGHT
+            if self.cell_counts[coverage_cell(case, action, state.tick)] < self.target
+            else 1.0
+            for action in passing
+        ]
 
     def choose(self, case: ObservedCase, state: CaseState, legal: list[Action]) -> Action:
         passing = gate_passing_pairs(case, state)
@@ -126,9 +175,23 @@ class ExploreArm:
             # propensity 1.0 rather than silently omitted.
             return self._record(case, state, DoNothing(), 1.0)
 
-        draw = derive_unit_float(self.seed, EXPLORE_ADDRESS, case.case_id, state.tick)
-        index = min(int(draw * len(passing)), len(passing) - 1)
-        return self._record(case, state, passing[index], 1.0 / len(passing))
+        weights = self._weights(case, state, passing)
+        total = sum(weights)
+        draw = derive_unit_float(self.seed, EXPLORE_ADDRESS, case.case_id, state.tick) * total
+
+        cumulative = 0.0
+        index = len(passing) - 1
+        for position, weight in enumerate(weights):
+            cumulative += weight
+            if draw < cumulative:
+                index = position
+                break
+
+        chosen = passing[index]
+        self.cell_counts[coverage_cell(case, chosen, state.tick)] += 1
+        # The probability this action was *chosen*, which under weighting is no
+        # longer 1/len(passing).
+        return self._record(case, state, chosen, weights[index] / total)
 
     def _record(
         self, case: ObservedCase, state: CaseState, action: Action, propensity: float

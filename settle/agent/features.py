@@ -25,6 +25,18 @@ from settle.schema.observed import ObservedCase
 
 IST: Final = timezone(timedelta(hours=5, minutes=30))
 
+# The agent's own belief about how close to a salary credit still counts as
+# liquid. Deliberately NOT `world.liquidity_window_days`: that is the
+# simulator's parameter and the agent may not read it. This is a modelling
+# assumption the policy makes about the world, and it would be wrong for it to
+# be exactly right. ASSERTED; needs a POLICY_PARAMS row at CP8 — see §21.
+LIQUIDITY_WINDOW_DAYS: Final[int] = 1
+
+# Days in each month, for the distance-to-month-boundary feature. February is
+# 28 because `payday_day` is bounded to 1..28 (§5.2), so no salary lands on the
+# 29th and leap years cannot change a liquidity window.
+_DAYS_IN_MONTH: Final[tuple[int, ...]] = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
 _RAILS: Final = tuple(Rail)
 _CLASSES: Final = tuple(DeclineClass)
 _ACTIONS: Final = tuple(ActionType)
@@ -57,7 +69,28 @@ FEATURE_NAMES: Final[tuple[str, ...]] = (
     "day_of_month_at_dispatch",
     "days_since_created",
     "inside_contact_window",
+    # --- timing, stated cyclically ---
+    # `day_of_month_at_dispatch` alone is a linear term through a cyclical
+    # effect: probability rises as a salary lands and decays after, then rises
+    # again. A monotonic fit through that learns roughly nothing, which is what
+    # CP7's two-level worked example looked like. These three state the same
+    # information in a shape a linear model can use.
+    "days_to_month_start",
+    "in_liquidity_window",
+    "days_since_last_attempt",
+    "has_prior_attempt",
 )
+
+
+def days_to_month_start(day: int, month: int) -> int:
+    """Distance to the nearest month boundary, 0-15.
+
+    Zero on the 1st and on the last day of the month — both are adjacent to a
+    salary credit, and a feature that treated the 31st as maximally far from
+    payday would be describing the calendar rather than the customer.
+    """
+    length = _DAYS_IN_MONTH[month - 1]
+    return min(day - 1, length - day + 1, 15)
 
 
 def action_offset(action: Action) -> int:
@@ -86,8 +119,15 @@ def dispatch_moment(case: ObservedCase, action: Action, tick: int) -> datetime:
     return case.created_at + timedelta(hours=tick + action_offset(action))
 
 
-def feature_row(case: ObservedCase, action: Action, tick: int) -> dict[str, float]:
-    """One row, from `ObservedCase` + `Action` + `tick` and nothing else."""
+def feature_row(
+    case: ObservedCase, action: Action, tick: int, last_attempt_tick: int | None = None
+) -> dict[str, float]:
+    """One row, from `ObservedCase` + `Action` + `tick` and nothing else.
+
+    `last_attempt_tick` is the tick of the previous debit on this case, which
+    the caller reconstructs from the decision stream. It is still not hidden
+    truth — a merchant knows when it last tried to charge someone.
+    """
     at = dispatch_moment(case, action, tick)
     ist = at.astimezone(IST)
     decline_class = classify(case.decline_code)
@@ -114,6 +154,14 @@ def feature_row(case: ObservedCase, action: Action, tick: int) -> dict[str, floa
         "days_since_created": float((tick + offset) / 24.0),
         "inside_contact_window": float(8 <= ist.hour < 19),
         "channel_none": float(channel is None),
+        "days_to_month_start": float(days_to_month_start(ist.day, ist.month)),
+        "in_liquidity_window": float(
+            days_to_month_start(ist.day, ist.month) <= LIQUIDITY_WINDOW_DAYS
+        ),
+        "days_since_last_attempt": float(
+            0.0 if last_attempt_tick is None else max(0, tick - last_attempt_tick) / 24.0
+        ),
+        "has_prior_attempt": float(last_attempt_tick is not None),
     }
     for rail in _RAILS:
         row[f"rail_{rail.value}"] = float(case.rail is rail)
@@ -127,7 +175,9 @@ def feature_row(case: ObservedCase, action: Action, tick: int) -> dict[str, floa
     return row
 
 
-def feature_vector(case: ObservedCase, action: Action, tick: int) -> list[float]:
+def feature_vector(
+    case: ObservedCase, action: Action, tick: int, last_attempt_tick: int | None = None
+) -> list[float]:
     """The row as an ordered vector, in `FEATURE_NAMES` order."""
-    row = feature_row(case, action, tick)
+    row = feature_row(case, action, tick, last_attempt_tick)
     return [row[name] for name in FEATURE_NAMES]

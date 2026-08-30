@@ -154,3 +154,65 @@ def test_EST_2_the_action_dimensions_are_encoded(case):
     assert target_rail(case, SwitchRail(to=Rail.ENACH)) is Rail.ENACH
     assert action_offset(Retry(at_hour_offset=72, rail=Rail.CARD)) == 72
     assert action_offset(DoNothing()) == 0
+
+
+# --------------------------------------------------------------------------
+# EST-11 — the timing features
+# --------------------------------------------------------------------------
+
+def test_EST_11_days_to_month_start_is_correct_including_february():
+    """Zero on the 1st and on the last day: both are adjacent to a salary
+    credit, and treating the 31st as maximally far from payday would be
+    describing the calendar rather than the customer."""
+    from settle.agent.features import days_to_month_start
+
+    assert days_to_month_start(1, 3) == 0
+    assert days_to_month_start(2, 3) == 1
+    assert days_to_month_start(31, 1) == 1
+    assert days_to_month_start(30, 4) == 1
+    # February is 28 because `payday_day` is bounded to 1..28 (§5.2), so no
+    # salary lands on the 29th and a leap year cannot move a liquidity window.
+    assert days_to_month_start(28, 2) == 1
+    assert days_to_month_start(27, 2) == 2
+    assert days_to_month_start(16, 3) == 15, "capped at 15"
+    for month in range(1, 13):
+        for day in range(1, 29):
+            assert 0 <= days_to_month_start(day, month) <= 15
+
+
+def test_EST_11_the_timing_features_come_from_created_at_plus_tick(case):
+    """Never a clock. A feature read from wall time changes on a replay."""
+    from settle.agent.features import LIQUIDITY_WINDOW_DAYS
+
+    # Walk a whole month of ticks and confirm the feature tracks the calendar.
+    seen = set()
+    for hours in range(0, 24 * 40, 24):
+        row = feature_row(case, DoNothing(), hours)
+        seen.add(row["days_to_month_start"])
+        assert row["in_liquidity_window"] == float(
+            row["days_to_month_start"] <= LIQUIDITY_WINDOW_DAYS
+        )
+    assert 0.0 in seen and max(seen) > 5, "the feature never moved across 40 days"
+
+    source = (AGENT_DIR / "features.py").read_text(encoding="utf-8")
+    for banned in ("datetime.now", "utcnow", "date.today"):
+        assert banned not in source
+
+
+def test_EST_11_the_liquidity_window_is_the_agents_belief_not_the_worlds():
+    """`world.liquidity_window_days` is the simulator's parameter and the agent
+    may not read it. This is a modelling assumption, and it would be wrong for
+    it to be exactly right by construction."""
+    from settle.agent.features import LIQUIDITY_WINDOW_DAYS
+
+    assert isinstance(LIQUIDITY_WINDOW_DAYS, int)
+    # Checked against imports, not raw text: the module docstring explains the
+    # rule and a text match would read the explanation as a breach.
+    assert not [n for n in _imports(AGENT_DIR / "features.py") if n.startswith("settle.sim")]
+
+
+def test_EST_11_days_since_last_attempt_is_optional_and_flagged(case):
+    first = feature_row(case, DoNothing(), 48, None)
+    later = feature_row(case, DoNothing(), 48, 24)
+    assert first["has_prior_attempt"] == 0.0 and first["days_since_last_attempt"] == 0.0
+    assert later["has_prior_attempt"] == 1.0 and later["days_since_last_attempt"] == 1.0

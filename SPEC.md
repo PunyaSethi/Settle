@@ -536,10 +536,27 @@ Reported: reliability diagram, ECE, Brier score.
 ### 10.2 Selection
 
 ```
-EV(a) = p_settle(a) × amount_recoverable
+EV(a) = [p_settle(a) − p_settle(do_nothing)] × amount_recoverable
         − action_cost(a)
         − opt_out_cost(a)
 ```
+
+Uplift, not raw probability. 21.8% of cases self-cure regardless of any action
+(§14.3), so a raw probability tells the policy that acting on a `willing_able`
+case succeeds 99% of the time — true, and useless, because it would have settled
+anyway. Subtracting the `do_nothing` term cancels the self-cure component and
+leaves the action's causal contribution.
+
+This is §14.3's incremental subtraction applied at decision level rather than
+batch level. It is also what gives `do_nothing` non-zero expected value, without
+which the contact-restraint result is unreachable by construction.
+
+The estimator must therefore predict `p_settle(do_nothing)` accurately. Its
+calibration on `do_nothing` rows is reported separately.
+
+Attribution windows were considered and rejected: the window would need tuning,
+a self-cure landing inside one would be falsely credited, and uplift achieves
+the same correction with no new parameter. Labels stay as they are.
 
 `argmax` over the legal action set, including `do_nothing`. Ties break toward
 the cheaper action.
@@ -1111,3 +1128,4 @@ Resolved:
 - 2026-08-30 — A79: §5.5 `ReportedOutcome` carries `reply_text`; §11 records the deterministic classifier and the escalation rate it reports.
 - 2026-08-30 — A80: §11 — the escalation rate is measured against a corpus written independently of the classifier. Measured at CP7.0: 44.4% agreement, 72.2% escalation.
 - 2026-08-30 — A81: §10.1 — splits are by case; the natural-recovery confound is recorded with its measured base rates.
+- 2026-08-30 — A82: §10.2 — EV is uplift over `do_nothing`, which cancels the self-cure component. Attribution windows considered and rejected.

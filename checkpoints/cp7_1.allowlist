@@ -1,0 +1,13 @@
+# CP7.1 — timing features, thin-cell oversampling, text-keyed escalation cache.
+
+SPEC.md
+PRIORS.md
+settle/agent/features.py
+settle/agent/train.py
+settle/agent/estimator.py
+settle/agent/calibration.py
+settle/runner/arms/explore.py
+settle/text/classify.py
+tests/test_features.py
+tests/test_estimator.py
+checkpoints/cp7_1.allowlist
