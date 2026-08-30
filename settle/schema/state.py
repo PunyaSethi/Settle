@@ -24,6 +24,7 @@ from enum import Enum
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_serializer
 
+from settle.schema.action import Action
 from settle.schema.enums import ArmMode, StopClass
 
 SCHEMA_CONFIG = ConfigDict(strict=True, extra="forbid", frozen=True)
@@ -34,6 +35,25 @@ class CaseStatus(str, Enum):
 
     OPEN = "open"
     STOPPED = "stopped"
+
+
+class Scheduled(BaseModel):
+    """One action committed to a future tick. SPEC §5.7.
+
+    A commitment, not a dispatch. `retry(at_hour_offset=72)` means "debit in
+    three days", and firing it now would make the offset a label rather than a
+    behaviour — which is what it was until this model existed.
+
+    At most one is pending per case. A second choice replaces it and the
+    replacement is logged, because a queue of scheduled actions is a queue of
+    decisions taken under circumstances that no longer hold.
+    """
+
+    model_config = SCHEMA_CONFIG
+
+    action: Action
+    due_tick: int = Field(ge=0)
+    scheduled_at: int = Field(ge=0)
 
 
 class CaseState(BaseModel):
@@ -79,6 +99,11 @@ class CaseState(BaseModel):
     # recorded, not inferred.
     settled: bool = False
     settled_at: AwareDatetime | None = None
+
+    # At most one pending commitment. Gates are re-evaluated when it comes due:
+    # a customer can opt out, promise or dispute between the choice and the
+    # firing, and an action that fires without re-gating is a compliance hole.
+    scheduled: Scheduled | None = None
 
     tick: int = Field(default=0, ge=0)
 

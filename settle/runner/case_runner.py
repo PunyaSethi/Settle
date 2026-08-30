@@ -12,6 +12,24 @@ condition is the entire thesis, so the constraint is structural rather than
 conventional: this module imports nothing from `settle.sim`, and RUN-9 asserts
 it by walking the AST. The `WorldHandle` is opaque and passed straight through.
 
+Scheduling
+----------
+`retry(at_hour_offset=n)` is a commitment to debit in n hours, not a debit now
+with a note attached. Until CP5.1 the runner dispatched immediately and used the
+offset only as a wake-up hint, which made the whole offset dimension of the
+action grid a label rather than a behaviour — an estimator trained on it would
+have learned nothing from it.
+
+So a schedulable choice sets `state.scheduled` and the runner sleeps to
+`due_tick`. **Gates are re-evaluated when it fires.** Circumstances change
+between choosing and firing: the customer may have opted out, promised, or
+raised a dispute. An action that fires on a verdict taken three days earlier is
+a compliance hole, and it is exactly the shape of bug a replayed webhook would
+exploit.
+
+A blocked schedule is logged and cleared, never silently dropped. At most one is
+pending; a second choice replaces it and the replacement is logged.
+
 Tick advancement
 ----------------
 Stepping hourly across the 30-day decision horizon is 720 iterations per case
@@ -22,7 +40,7 @@ runner jumps to the next tick at which a verdict *could* differ:
   * a gate that blocked and clears with time contributes its clearing tick —
     G1 the next window opening, G2 the minimum-gap or rolling-window expiry,
     G6 the promise date;
-  * a scheduled `retry(at_hour_offset=n)` contributes `tick + n`;
+  * a pending commitment contributes its `due_tick`;
   * otherwise the runner advances by one day.
 
 A gate that cannot clear by waiting contributes nothing. G9 with no notice
@@ -59,7 +77,7 @@ from settle.schema.action import Action, Retry, SwitchRail
 from settle.schema.enums import ActionType, Actor, ArmMode, LedgerKind, Rail, ReportedStatus
 from settle.schema.observed import ObservedCase
 from settle.schema.outcome import ReportedOutcome
-from settle.schema.state import CaseState, CaseStatus, as_of
+from settle.schema.state import CaseState, CaseStatus, Scheduled, as_of
 
 # When the arm has chosen to do nothing and no timer is pending, it reconsiders
 # tomorrow. In POLICY_PARAMS with a PRIORS row (A68): it sets how many decisions
@@ -91,6 +109,11 @@ def _next_contact_window_open(case: ObservedCase, state: CaseState) -> int:
     return state.tick + (ahead or 24)
 
 
+def scheduled_offset(action: Action) -> int:
+    """Hours between choosing an action and its firing. A71's offset dimension."""
+    return action.at_hour_offset if isinstance(action, Retry) else 0
+
+
 def next_interesting_tick(
     case: ObservedCase, state: CaseState, action: Action, blocked_by: tuple[str, ...]
 ) -> int:
@@ -112,12 +135,15 @@ def next_interesting_tick(
     if "G6" in blocked_by and state.promise_date is not None:
         candidates.add(_tick_of_date(case, state.promise_date))
 
-    if isinstance(action, Retry) and action.at_hour_offset:
-        candidates.add(state.tick + action.at_hour_offset)
+    if state.scheduled is not None:
+        candidates.add(state.scheduled.due_tick)
 
     future = {tick for tick in candidates if tick > state.tick}
     proposed = min(future) if future else state.tick + DECISION_CADENCE_HOURS
-    return max(proposed, state.tick + 1)
+    # A commitment due past the horizon simply never fires; S6 stops the case
+    # first. Letting the tick run past the horizon to reach it would break the
+    # one bound the loop actually guarantees.
+    return max(min(proposed, DECISION_HORIZON_HOURS), state.tick + 1)
 
 
 def _apply_dispatch(case: ObservedCase, state: CaseState, action: Action, key: str) -> CaseState:
@@ -179,6 +205,37 @@ def run_case(
             arm=arm.name,
         )
 
+    def dispatch(current: CaseState, action: Action) -> CaseState:
+        """WRITE-AHEAD. The key is built from the tick the action fires at, the
+        entry is written and flushed, and only then does anything touch the
+        world (INV-5, INV-4, §12 G5)."""
+        key = dispatch_key(case, current, action)
+        ledger.append(
+            case_id=case.case_id,
+            at=as_of(case.created_at, current),
+            kind=LedgerKind.DISPATCH,
+            actor=Actor.SYSTEM,
+            payload={"action": action.model_dump(mode="json"), "idempotency_key": key},
+            reason_code="DISPATCH_INTENT",
+            arm=arm.name,
+        )
+        outcome = execute(action, case, current, world, observability)
+        updated = _apply_dispatch(case, current, action, key)
+        ledger.append(
+            case_id=case.case_id,
+            at=as_of(case.created_at, current),
+            kind=LedgerKind.REPORTED_OUTCOME,
+            actor=Actor.SYSTEM,
+            payload={
+                "status": outcome.status.value,
+                "arrival_count": outcome.arrival_count,
+                "payment_id": outcome.payment_id,
+            },
+            reason_code=f"REPORTED_{outcome.status.value.upper()}",
+            arm=arm.name,
+        )
+        return _apply_outcome(updated, outcome)
+
     for _ in range(MAX_STEPS_PER_CASE):
         # 1. stops
         stop = check_stops(case, state, arm.mode)
@@ -193,11 +250,54 @@ def run_case(
             log(LedgerKind.STOP, Actor.POLICY, {"stop": stop.stop}, stop.reason_code)
             return state
 
-        # 2-3. the legal set, and the arm's choice from it
+        # 2. a commitment that has come due. Gates are evaluated again: the
+        #    verdict that authorised it may be days old.
+        if state.scheduled is not None and state.tick >= state.scheduled.due_tick:
+            due = state.scheduled
+            result = evaluate_gates(case, state, due.action, arm.mode)
+            log(
+                LedgerKind.GATE_CHECK,
+                Actor.POLICY,
+                {
+                    "action": due.action.type.value,
+                    "blocked_by": list(result.blocked_by),
+                    "violations": list(result.violations),
+                    "allowed": result.allowed,
+                    "scheduled": True,
+                    "scheduled_at": due.scheduled_at,
+                    "due_tick": due.due_tick,
+                },
+                result.first_block or "GATES_PASSED",
+            )
+            state = state.model_copy(update={"scheduled": None})
+
+            if not result.allowed:
+                # Logged and cleared, never silently dropped. Control returns to
+                # the arm, which decides again with the state as it now stands.
+                log(
+                    LedgerKind.DECISION,
+                    Actor.POLICY,
+                    {
+                        "action": due.action.model_dump(mode="json"),
+                        "due_tick": due.due_tick,
+                        "blocked_by": list(result.blocked_by),
+                    },
+                    "SCHEDULE_BLOCKED",
+                )
+                state = state.model_copy(
+                    update={"tick": next_interesting_tick(case, state, due.action, result.blocked_by)}
+                )
+                continue
+
+            state = dispatch(state, due.action)
+            state = state.model_copy(
+                update={"tick": next_interesting_tick(case, state, due.action, ())}
+            )
+            continue
+
+        # 3-4. the legal set, the arm's choice, and all eleven gates
         legal = legal_actions(case, state)
         action = arm.choose(case, state, legal)
-
-        # 4. gates — all eleven, always
         result = evaluate_gates(case, state, action, arm.mode)
         log(
             LedgerKind.GATE_CHECK,
@@ -222,32 +322,42 @@ def run_case(
             state = state.model_copy(update={"tick": next_interesting_tick(case, state, action, ())})
             continue
 
-        # 6. WRITE-AHEAD. The key is built, the entry is written and flushed,
-        #    and only then does anything touch the world (INV-5).
-        key = dispatch_key(case, state, action)
-        log(
-            LedgerKind.DISPATCH,
-            Actor.SYSTEM,
-            {"action": action.model_dump(mode="json"), "idempotency_key": key},
-            "DISPATCH_INTENT",
-        )
-        outcome = execute(action, case, state, world, observability)
+        # 6. a schedulable choice is a commitment, not a dispatch
+        offset = scheduled_offset(action)
+        if offset > 0:
+            commitment = Scheduled(
+                action=action, due_tick=state.tick + offset, scheduled_at=state.tick
+            )
+            if state.scheduled is not None:
+                log(
+                    LedgerKind.DECISION,
+                    Actor.POLICY,
+                    {
+                        "replaced": state.scheduled.action.model_dump(mode="json"),
+                        "replaced_due_tick": state.scheduled.due_tick,
+                        "action": action.model_dump(mode="json"),
+                        "due_tick": commitment.due_tick,
+                    },
+                    "SCHEDULE_REPLACED",
+                )
+            log(
+                LedgerKind.DECISION,
+                Actor.POLICY,
+                {
+                    "action": action.model_dump(mode="json"),
+                    "due_tick": commitment.due_tick,
+                    "offset_hours": offset,
+                },
+                "SCHEDULED",
+            )
+            state = state.model_copy(update={"scheduled": commitment})
+            state = state.model_copy(
+                update={"tick": next_interesting_tick(case, state, action, ())}
+            )
+            continue
 
-        # 7. record what the dispatch consumed, and what we were told
-        state = _apply_dispatch(case, state, action, key)
-        log(
-            LedgerKind.REPORTED_OUTCOME,
-            Actor.SYSTEM,
-            {
-                "status": outcome.status.value,
-                "arrival_count": outcome.arrival_count,
-                "payment_id": outcome.payment_id,
-            },
-            f"REPORTED_{outcome.status.value.upper()}",
-        )
-        state = _apply_outcome(state, outcome)
-
-        # 8. advance
+        # 7. immediate
+        state = dispatch(state, action)
         state = state.model_copy(
             update={"tick": next_interesting_tick(case, state, action, result.blocked_by)}
         )

@@ -285,8 +285,31 @@ CaseState
   dispatched_keys    frozenset[str]      # G5 idempotency
   settled            bool                # S1; a settlement, never an authorisation
   settled_at         datetime | null
+  scheduled          Scheduled | null    # one pending commitment, at most
   tick               int                 # hours since case created_at
 ```
+
+```
+Scheduled
+  action           Action
+  due_tick         int
+  scheduled_at     int                 # tick when it was chosen
+```
+
+`retry(at_hour_offset=n)` is a commitment to debit in n hours, not a debit now
+with a note attached. A schedulable choice sets `scheduled` and the runner
+sleeps to `due_tick`.
+
+**Gates are re-evaluated when it fires.** Circumstances change between choosing
+and firing: the customer may have opted out, promised, or raised a dispute. An
+action that fires on a verdict taken three days earlier is a compliance hole,
+and it is the shape of bug a replayed webhook would exploit. A blocked schedule
+is logged and cleared, never silently dropped, and control returns to the arm.
+
+At most one commitment is pending. A second choice replaces it and the
+replacement is logged: a queue of scheduled actions is a queue of decisions
+taken under circumstances that no longer hold. A commitment due past
+`decision_horizon_days` never fires — S6 stops the case first.
 
 Collections are frozen types, not `list` and `set`. A frozen model holding a
 mutable list is only half frozen, and a `set`'s iteration order varies with
@@ -461,6 +484,12 @@ the fact: legality is joint over action and hour — G1 constrains hours, and G9
 constrains them further on `enach` — so it does not factor, and any formula
 would be free to drift from the sampler.
 
+Rows where `do_nothing` was the only legal gate-passing option are not
+decisions; they are the absence of one. 78.6% of EXPLORE's ticks are such rows,
+and training on them teaches the model to predict inaction rather than to
+predict settlement. The estimator trains on the 21.4% where an arm had a real
+choice. Filtered row count is reported alongside the training set size.
+
 Coverage is reported per (action, hour_bucket) cell. Cells below a minimum
 observation threshold are flagged as EXTRAPOLATED in the reliability report and
 excluded from the headline calibration figures.
@@ -521,7 +550,7 @@ degrading silently. Every run prints calls, cache hits, tokens, estimated cost.
 | G2 | Frequency cap: 3 per week, 20h minimum gap |
 | G3 | Mandate validity |
 | G4 | Card-network submission cap. Counts submissions to the card network, whichever verb produced them: a `retry` on card and a `switch_rail` **to** card both count, a switch away does not. Distinct from G10, which caps retries per decline class. |
-| G5 | Idempotency key uniqueness |
+| G5 | Idempotency key uniqueness. The key is built from `due_tick` — the tick the action fires at — not from the tick at which it was chosen. Otherwise scheduling and then rescheduling the same action produces the same key twice and G5 blocks a legitimate action. Satisfied structurally: the runner dispatches only when `state.tick == due_tick`. |
 | G6 | Promise suppression window |
 | G7 | Opt-out honoured on every channel |
 | G8 | Dispute freeze |
@@ -875,9 +904,20 @@ Resolved inside the checkpoint that reaches them, not by further spec amendment.
 | OQ-5 | A22's perturbed generator variant needs a named perturbation set — which parameters, shifted how far — fixed before the estimator is trained. Otherwise it is a check that can be quietly weakened until it passes. | D2 |
 | OQ-6 | Razorpay's default settlement cycle is publicly documented. `settlement_lag_h` should be a cited prior, not ASSERTED, and the recon-report availability lag should be folded into it. Cheap INV-10 win. | D4 |
 | OQ-20 | `settlement_lag_reporting` and `reversal_reporting_delay` are declared but unconsumed until the D3 reporting layer exists. GEN-4 cannot detect a dead parameter. Add a liveness check to the D3 checkpoint asserting every observability parameter is read by at least one code path. | D3 |
+| OQ-31 | Only `retry` carries a schedulable offset in §5.3's frozen verb set, so contacts are never scheduled to a chosen hour — the grid's offset dimension covers debits only. Widening it is a §5.3 amendment, and OURS may not need it. | CP8 |
 
 Resolved:
 
+- OQ-30 — `at_hour_offset` was a label: the runner dispatched immediately and
+  used it only as a wake-up hint, so the offset dimension of the action grid
+  carried no behaviour for an estimator to learn. Resolved by A73: a schedulable
+  choice becomes a commitment that fires at `due_tick`, re-gated on arrival.
+- OQ-32 — the gate's EXPLORE runs took minutes. Resolved: the fixture is
+  parameterised and the gate runs 3,000 cases; the 30,000-case run is a manual
+  D4 exercise.
+- OQ-33 — 78.6% of EXPLORE's decisions were `do_nothing` with no alternative.
+  Resolved by A75: the estimator trains only on rows where the choice set had
+  more than one member, and the filtered count is reported.
 - OQ-26 — the runner's daily cadence was a bare literal. Resolved by A68:
   `decision_cadence_hours` in POLICY_PARAMS with a PRIORS row, covered by PAR-1.
 - OQ-27 — G4 read `attempts_used`, so a switch to card escaped the card-network
@@ -988,3 +1028,6 @@ Resolved:
 - 2026-08-29 — A70: §12 G4 restated as a card-network *submission* cap; `card_submissions_used` added to §5.7. Resolves OQ-27.
 - 2026-08-29 — A71: §5.3 declares the action grid — eight hour offsets, bounded by the decision horizon, shared by EXPLORE and OURS as a binding constraint.
 - 2026-08-29 — A72: §14.1 — EXPLORE samples the gate-passing set, not the legal set; the Arm protocol permits consulting gates before choosing.
+- 2026-08-30 — A73: §5.7 `Scheduled` added — a schedulable choice is a commitment that fires at `due_tick` and is re-gated on arrival. Resolves OQ-30.
+- 2026-08-30 — A74: §12 G5's idempotency key is built from `due_tick`, so rescheduling the same action is not a duplicate.
+- 2026-08-30 — A75: §10.1 — the estimator trains only on rows where the choice set had more than one member. Resolves OQ-33.

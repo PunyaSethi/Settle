@@ -1,0 +1,13 @@
+# CP5.1 — scheduling. retry(at_hour_offset=n) fires at tick+n and is re-gated
+# on arrival. Blocks the estimator: without it the grid's offset dimension
+# carried no behaviour to learn.
+
+SPEC.md
+PRIORS.md
+settle/schema/state.py
+settle/runner/case_runner.py
+settle/runner/arms/explore.py
+settle/runner/arms/baselines.py
+tests/test_runner.py
+tests/test_explore.py
+checkpoints/cp5_1.allowlist

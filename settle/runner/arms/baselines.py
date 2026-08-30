@@ -82,6 +82,13 @@ class FixedLadderArm:
     name = "B2"
     mode = ArmMode.ENFORCE
 
+    # A ladder is a schedule, not a queue. Counting rungs by dispatches alone
+    # stalls the whole arm the moment a message is gated: `contacts_used` never
+    # increments, the rung never advances, and B2 sits on the same rung until
+    # the horizon. Real dunning ladders fire on days, so this one does too — a
+    # rung becomes available when its day arrives, and is spent once.
+    LADDER_DAYS: Final[tuple[int, ...]] = (0, 1, 3, 5, 8, 12)
+
     # Retry, message, retry, message, retry, message. The shape of every
     # dunning ladder in production.
     LADDER: Final[tuple[tuple[ActionType, ...], ...]] = (
@@ -104,14 +111,20 @@ class FixedLadderArm:
             if notice is not None:
                 return notice
 
-        step = state.attempts_used + state.contacts_used
-        if step >= len(self.LADDER):
-            return DoNothing()
+        spent = state.attempts_used + state.contacts_used
+        available = sum(1 for day in self.LADDER_DAYS if day <= state.tick // 24)
 
-        chosen = _first(legal, *self.LADDER[step])
-        if chosen is None:
-            return DoNothing()
-        return _schedule(chosen, self.retry_offsets[min(state.attempts_used, 2)])
+        # Take the first rung whose day has arrived and whose verb the class
+        # permits. Skipping rather than stalling: §9 forbids contact for
+        # `time_shiftable`, so a ladder that waited for its message rung would
+        # sit out the largest class in the batch entirely. Skipping is not
+        # intelligence — it does not ask *why* a rung is unavailable, it just
+        # takes the next one it can.
+        for rung in range(spent, min(available, len(self.LADDER))):
+            chosen = _first(legal, *self.LADDER[rung])
+            if chosen is not None:
+                return _schedule(chosen, self.retry_offsets[min(state.attempts_used, 2)])
+        return DoNothing()
 
 
 class MaxPressureArm:

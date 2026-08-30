@@ -7,6 +7,7 @@ nothing from `settle.sim.truth`, and `case_runner.py` imports nothing from
 """
 
 import ast
+import collections
 import json
 import subprocess
 import sys
@@ -116,12 +117,25 @@ def test_RUN_2_tick_advancement_is_strictly_increasing(batch):
             assert next_interesting_tick(generated.observed, state, action, blocked) > state.tick
 
 
-def test_RUN_2_a_scheduled_retry_advances_to_its_own_offset(batch):
+def test_RUN_2_a_pending_commitment_is_the_next_wake_up(batch):
+    """A73 moved this. The offset no longer advances the tick by itself — a
+    commitment does, and it is `due_tick` that the runner sleeps to. Asserting
+    the old behaviour would be asserting the bug OQ-30 was about.
+    """
+    from settle.schema.state import Scheduled
+
     generated = batch.cases[3]
     state = CaseState(case_id=generated.observed.case_id, arm="B0", arm_mode=ArmMode.ENFORCE)
-    scheduled = Retry(at_hour_offset=6, rail=Rail.CARD)
-    assert next_interesting_tick(generated.observed, state, scheduled, ()) == 6
+    loose = Retry(at_hour_offset=6, rail=Rail.CARD)
+
+    # An offset on a loose action changes nothing; it is not a commitment yet.
+    assert next_interesting_tick(generated.observed, state, loose, ()) == DECISION_CADENCE_HOURS
     assert next_interesting_tick(generated.observed, state, DoNothing(), ()) == DECISION_CADENCE_HOURS
+
+    committed = state.model_copy(
+        update={"scheduled": Scheduled(action=loose, due_tick=6, scheduled_at=0)}
+    )
+    assert next_interesting_tick(generated.observed, committed, loose, ()) == 6
 
 
 def test_RUN_2_a_g1_block_advances_to_the_next_window_opening(batch):
@@ -401,3 +415,251 @@ def test_RUN_8_a_switch_to_card_counts_as_a_card_network_submission():
         update={"attempts_used": 99, "rail_switches_used": 99, "card_submissions_used": 0}
     )
     assert gate_g4(case, busy_elsewhere, to_card).allowed is True
+
+
+# --------------------------------------------------------------------------
+# SCD — scheduling. SPEC §5.7, A73.
+# --------------------------------------------------------------------------
+
+from settle.policy.params import hour_offsets  # noqa: E402
+from settle.schema.action import ServeNotice  # noqa: E402
+from settle.schema.enums import DeclineClass  # noqa: E402
+from settle.schema.state import Scheduled  # noqa: E402
+
+
+class _FixedRetryArm:
+    """Always the same retry at the same offset. A probe, not a policy."""
+
+    name = "PROBE"
+
+    def __init__(self, offset: int, mode: ArmMode = ArmMode.ENFORCE) -> None:
+        self.offset = offset
+        self.mode = mode
+
+    def choose(self, case, state, legal):
+        for action in legal:
+            if isinstance(action, Retry):
+                return Retry(at_hour_offset=self.offset, rail=action.rail)
+        return DoNothing()
+
+
+def _tick_of(case, moment) -> int:
+    return round((moment - case.created_at).total_seconds() / 3600)
+
+
+def _retryable(batch, rail=Rail.CARD):
+    return [
+        g
+        for g in batch.cases
+        if g.observed.rail is rail and g.observed.decline_code == "insufficient_funds"
+    ]
+
+
+def _scheduled_then_dispatched(entries, case):
+    """Pair each SCHEDULED decision with the dispatch that followed it."""
+    pending = None
+    pairs = []
+    for entry in entries:
+        if entry.case_id != case.case_id:
+            continue
+        if entry.kind is LedgerKind.DECISION and entry.reason_code == "SCHEDULED":
+            pending = entry
+        elif entry.kind is LedgerKind.DISPATCH and pending is not None:
+            pairs.append((pending, entry))
+            pending = None
+    return pairs
+
+
+def test_SCD_1_a_scheduled_retry_dispatches_at_tick_plus_offset(tmp_path, batch):
+    """OQ-30. Until A73 the offset was a label: the runner dispatched at once
+    and used it only as a wake-up hint, so an estimator would have learned
+    nothing from the grid's offset dimension."""
+    candidates = _retryable(batch)
+    assert candidates
+    path = tmp_path / "scd1.jsonl"
+    with Ledger(path) as ledger:
+        for generated in candidates[:40]:
+            drive(generated, _FixedRetryArm(72), ledger)
+
+    entries = read_entries(path)
+    checked = 0
+    for generated in candidates[:40]:
+        for scheduled, dispatched in _scheduled_then_dispatched(entries, generated.observed):
+            chosen_at = _tick_of(generated.observed, scheduled.at)
+            fired_at = _tick_of(generated.observed, dispatched.at)
+            assert scheduled.payload["offset_hours"] == 72
+            assert scheduled.payload["due_tick"] == chosen_at + 72
+            assert fired_at == chosen_at + 72, (chosen_at, fired_at)
+            checked += 1
+    assert checked, "nothing was scheduled, so nothing was tested"
+
+
+@pytest.mark.parametrize("offset", [o for o in hour_offsets() if o > 0])
+def test_SCD_2_the_realised_gap_matches_every_declared_offset(tmp_path, batch, offset):
+    candidates = _retryable(batch)[:25]
+    path = tmp_path / f"scd2_{offset}.jsonl"
+    with Ledger(path) as ledger:
+        for generated in candidates:
+            drive(generated, _FixedRetryArm(offset), ledger)
+
+    entries = read_entries(path)
+    gaps = []
+    for generated in candidates:
+        for scheduled, dispatched in _scheduled_then_dispatched(entries, generated.observed):
+            gaps.append(
+                _tick_of(generated.observed, dispatched.at)
+                - _tick_of(generated.observed, scheduled.at)
+            )
+    assert gaps, f"offset {offset} never fired"
+    assert set(gaps) == {offset}, (offset, collections.Counter(gaps))
+
+
+def test_SCD_3_a_state_change_between_scheduling_and_firing_prevents_dispatch(tmp_path, batch):
+    """The reason A73 re-gates on arrival.
+
+    An opt-out in ENFORCE stops the case before the commitment can fire; a
+    dispute in OBSERVE, where the compliance stops are relaxed, reaches the
+    gate itself and G8 blocks the debit. Either way the commitment does not
+    dispatch on a verdict taken days earlier.
+    """
+    generated = _retryable(batch)[0]
+    case = generated.observed
+    commitment = Scheduled(
+        action=Retry(at_hour_offset=48, rail=case.rail), due_tick=48, scheduled_at=0
+    )
+
+    opted_out = CaseState(
+        case_id=case.case_id, arm="PROBE", arm_mode=ArmMode.ENFORCE,
+        tick=48, scheduled=commitment, opted_out=True,
+    )
+    path = tmp_path / "scd3_optout.jsonl"
+    with Ledger(path) as ledger:
+        final = drive(generated, _FixedRetryArm(48), ledger, initial_state=opted_out)
+    assert final.stop_reason == "S4_OPT_OUT"
+    assert not [e for e in read_entries(path) if e.kind is LedgerKind.DISPATCH]
+
+    disputed = CaseState(
+        case_id=case.case_id, arm="PROBE", arm_mode=ArmMode.OBSERVE,
+        tick=48, scheduled=commitment, disputed=True,
+    )
+    path = tmp_path / "scd3_dispute.jsonl"
+    with Ledger(path) as ledger:
+        drive(generated, _FixedRetryArm(48, ArmMode.OBSERVE), ledger, initial_state=disputed)
+
+    entries = read_entries(path)
+    due = [e for e in entries if e.kind is LedgerKind.GATE_CHECK and e.payload.get("scheduled")]
+    assert due, "the commitment never came due"
+    assert "G8" in due[0].payload["blocked_by"]
+
+
+def test_SCD_4_a_blocked_commitment_is_logged_and_control_returns_to_the_arm(tmp_path, batch):
+    """Logged and cleared, never silently dropped."""
+    generated = _retryable(batch)[0]
+    case = generated.observed
+    at_cap = CaseState(
+        case_id=case.case_id, arm="PROBE", arm_mode=ArmMode.ENFORCE, tick=30,
+        card_submissions_used=99,
+        scheduled=Scheduled(
+            action=Retry(at_hour_offset=30, rail=Rail.CARD), due_tick=30, scheduled_at=0
+        ),
+    )
+    path = tmp_path / "scd4.jsonl"
+    with Ledger(path) as ledger:
+        final = drive(generated, _FixedRetryArm(30), ledger, initial_state=at_cap)
+
+    entries = read_entries(path)
+    blocked = [e for e in entries if e.reason_code == "SCHEDULE_BLOCKED"]
+    assert blocked, "the block was not logged"
+    assert "G4" in blocked[0].payload["blocked_by"]
+    assert blocked[0].payload["due_tick"] == 30
+
+    # Cleared, and the arm was asked again afterwards.
+    assert final.scheduled is None
+    after = [e for e in entries if e.seq > blocked[0].seq and e.kind is LedgerKind.GATE_CHECK]
+    assert after, "control never returned to the arm"
+    assert not after[0].payload.get("scheduled")
+
+
+def test_SCD_5_a_second_commitment_replaces_the_first_and_is_logged(tmp_path, batch):
+    """A queue of scheduled actions is a queue of decisions taken under
+    circumstances that no longer hold."""
+    generated = _retryable(batch)[0]
+    case = generated.observed
+    stale = CaseState(
+        case_id=case.case_id, arm="PROBE", arm_mode=ArmMode.ENFORCE, tick=0,
+        scheduled=Scheduled(
+            action=Retry(at_hour_offset=168, rail=Rail.CARD), due_tick=600, scheduled_at=0
+        ),
+    )
+    path = tmp_path / "scd5.jsonl"
+    with Ledger(path) as ledger:
+        drive(generated, _FixedRetryArm(18), ledger, initial_state=stale)
+
+    replaced = [e for e in read_entries(path) if e.reason_code == "SCHEDULE_REPLACED"]
+    assert replaced, "the replacement was not logged"
+    assert replaced[0].payload["replaced_due_tick"] == 600
+    assert replaced[0].payload["due_tick"] == 18
+    assert replaced[0].payload["replaced"]["at_hour_offset"] == 168
+
+
+@pytest.mark.parametrize("offset", [0, 6, 72, 168])
+def test_SCD_6_scheduling_does_not_break_termination(tmp_path, batch, offset):
+    path = tmp_path / f"scd6_{offset}.jsonl"
+    with Ledger(path) as ledger:
+        for generated in batch.cases[:200]:
+            final = drive(generated, _FixedRetryArm(offset), ledger)
+            assert final.status is CaseStatus.STOPPED
+            assert final.tick <= DECISION_HORIZON_HOURS
+
+
+def test_SCD_6_a_commitment_due_past_the_horizon_never_fires(tmp_path, batch):
+    """S6 stops the case first. Letting the tick run past the horizon to reach
+    a commitment would break the one bound the loop guarantees."""
+    generated = _retryable(batch)[0]
+    case = generated.observed
+    late = CaseState(
+        case_id=case.case_id, arm="PROBE", arm_mode=ArmMode.ENFORCE,
+        tick=DECISION_HORIZON_HOURS - 10,
+        scheduled=Scheduled(
+            action=Retry(at_hour_offset=168, rail=Rail.CARD),
+            due_tick=DECISION_HORIZON_HOURS + 158,
+            scheduled_at=DECISION_HORIZON_HOURS - 10,
+        ),
+    )
+    path = tmp_path / "scd6_late.jsonl"
+    with Ledger(path) as ledger:
+        final = drive(generated, _FixedRetryArm(168), ledger, initial_state=late)
+    assert final.stop_reason == "S6_DECISION_HORIZON"
+    assert final.tick <= DECISION_HORIZON_HOURS
+    assert not [e for e in read_entries(path) if e.kind is LedgerKind.DISPATCH]
+
+
+def test_SCD_7_the_ledger_is_byte_identical_with_scheduling_active(tmp_path):
+    script = (
+        "import sys;"
+        "from settle.audit.chain import Ledger;"
+        "from settle.execute.executor import WorldHandle;"
+        "from settle.runner.arms.baselines import FixedLadderArm;"
+        "from settle.runner.case_runner import run_case;"
+        "from settle.sim.generator import generate_batch;"
+        "from settle.sim.observability import ObservabilityConfig;"
+        "from settle.sim.streams import Streams;"
+        "b = generate_batch(120, 42); s = Streams(42); o = ObservabilityConfig();"
+        "led = Ledger(sys.argv[1]);"
+        "[run_case(g.observed, FixedLadderArm(), WorldHandle(truth=g.truth, streams=s), o, led)"
+        " for g in b.cases];"
+        "led.close();"
+        "print(open(sys.argv[1]).read(), end='')"
+    )
+    outputs = []
+    for hash_seed in ("0", "1", "random"):
+        target = tmp_path / f"scd7_{hash_seed}.jsonl"
+        outputs.append(
+            subprocess.run(
+                [sys.executable, "-c", script, str(target)],
+                cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+                env={"PYTHONHASHSEED": hash_seed, "PATH": "/usr/bin:/bin"},
+            ).stdout
+        )
+    assert outputs[0] == outputs[1] == outputs[2]
+    assert "SCHEDULED" in outputs[0], "the fixture produced no scheduling to compare"

@@ -7,10 +7,12 @@ degenerate coverage. Better to find that out here than after training.
 """
 
 import collections
+import os
 import subprocess
 import sys
 from datetime import timedelta, timezone
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -36,7 +38,9 @@ from settle.sim.streams import Streams
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXPLORE_SEED = 90_000
-MIN_OBSERVATIONS = 30
+# Scaled to the run: the question EXP-6 answers is whether the *training* run
+# covers the grid, and the gate deliberately runs a tenth of it (OQ-32).
+MIN_OBSERVATIONS = max(10, round(30 * int(os.environ.get("SETTLE_EXPLORE_CASES", "3000")) / 30_000))
 
 
 def _pair(action) -> tuple:
@@ -71,16 +75,21 @@ def explore_run(n_cases: int, ledger: Ledger) -> ExploreArm:
     return arm
 
 
+# The gate runs this; the full 30,000 is a manual D4 exercise (OQ-32). Override
+# with SETTLE_EXPLORE_CASES to reproduce the training-set coverage locally.
+GATE_EXPLORE_CASES: Final[int] = int(os.environ.get("SETTLE_EXPLORE_CASES", "3000"))
+
+
 @pytest.fixture(scope="module")
 def big_run(tmp_path_factory):
-    """The 30,000-case EXPLORE run, built once and shared.
+    """One EXPLORE run, built once and shared by every slow test.
 
-    Three slow tests each doing their own run was ~5 minutes of the gate for one
+    Three slow tests each doing their own run was minutes of gate time for one
     run's worth of information.
     """
-    path = tmp_path_factory.mktemp("explore30k") / "audit.jsonl"
+    path = tmp_path_factory.mktemp("explore") / "audit.jsonl"
     with Ledger(path) as ledger:
-        arm = explore_run(30_000, ledger)
+        arm = explore_run(GATE_EXPLORE_CASES, ledger)
     return arm, path
 
 
@@ -143,7 +152,7 @@ def test_EXP_1_the_realised_distribution_is_uniform_over_the_passing_set(small_r
 
 
 @pytest.mark.slow
-def test_EXP_1_uniformity_holds_at_thirty_thousand_cases(big_run):
+def test_EXP_1_uniformity_holds_at_scale(big_run):
     arm, _ = big_run
     by_size = collections.defaultdict(collections.Counter)
     for decision in arm.decisions:
@@ -231,25 +240,59 @@ def test_EXP_2_propensity_would_be_wrong_if_sampled_from_the_legal_set(small_run
 # EXP-3
 # --------------------------------------------------------------------------
 
-def test_EXP_3_explore_never_violates_a_gate(small_run):
-    """It samples from what passes, so nothing it chooses can be blocked."""
+def _fresh_choices(entries):
+    """Gate checks on an action the arm just chose, not on a commitment coming due."""
+    return [
+        e
+        for e in entries
+        if e.kind is LedgerKind.GATE_CHECK and not e.payload.get("scheduled")
+    ]
+
+
+def _due_commitments(entries):
+    return [
+        e for e in entries if e.kind is LedgerKind.GATE_CHECK and e.payload.get("scheduled")
+    ]
+
+
+def test_EXP_3_explore_never_chooses_a_blocked_action(small_run):
+    """It samples from what passes, so nothing it *chooses* can be blocked."""
     _, path = small_run
-    checks = [e for e in read_entries(path) if e.kind is LedgerKind.GATE_CHECK]
-    assert checks
-    blocked = [e for e in checks if e.payload["blocked_by"]]
-    assert not blocked, f"{len(blocked)} EXPLORE choices were blocked by gates"
-    assert not [e for e in checks if e.payload["violations"]]
+    entries = read_entries(path)
+    fresh = _fresh_choices(entries)
+    assert fresh
+    blocked = [e for e in fresh if e.payload["blocked_by"]]
+    assert not blocked, f"{len(blocked)} EXPLORE choices were blocked at the moment of choosing"
+    assert not [e for e in entries if e.kind is LedgerKind.GATE_CHECK and e.payload["violations"]]
+
+
+def test_EXP_3_a_commitment_blocked_on_arrival_is_never_dispatched(small_run):
+    """The re-gating path, and the reason it exists.
+
+    A commitment chosen three days ago can be blocked when it fires — the
+    customer opted out, or promised, or disputed. That is not EXPLORE violating
+    a gate; it is the gate doing the job A73 added it for. What must never
+    happen is the action dispatching anyway.
+    """
+    _, path = small_run
+    entries = read_entries(path)
+    due = _due_commitments(entries)
+    assert due, "no commitment ever came due, so the re-gating path is untested"
+
+    blocked = [e for e in due if e.payload["blocked_by"]]
+    assert blocked, "no commitment was ever blocked on arrival"
+
+    for entry in blocked:
+        following = entries[entry.seq + 1]
+        assert following.kind is LedgerKind.DECISION
+        assert following.reason_code == "SCHEDULE_BLOCKED"
 
 
 @pytest.mark.slow
-def test_EXP_3_zero_violations_across_thirty_thousand_cases(big_run):
+def test_EXP_3_zero_violations_at_scale(big_run):
     _, path = big_run
-    blocked = [
-        e
-        for e in read_entries(path)
-        if e.kind is LedgerKind.GATE_CHECK and e.payload["blocked_by"]
-    ]
-    assert not blocked, f"{len(blocked)} blocked choices at 30k"
+    blocked = [e for e in _fresh_choices(read_entries(path)) if e.payload["blocked_by"]]
+    assert not blocked, f"{len(blocked)} blocked choices at {GATE_EXPLORE_CASES} cases"
 
 
 # --------------------------------------------------------------------------
@@ -342,13 +385,18 @@ def _reachable(verb: ActionType, bucket: int) -> bool:
 
 
 @pytest.mark.slow
-def test_EXP_6_coverage_of_the_action_grid_at_thirty_thousand_cases(big_run, capsys):
+def test_EXP_6_coverage_of_the_action_grid(big_run, capsys):
     arm, _ = big_run
     grid, hourly = _coverage(arm.decisions)
     offsets = hour_offsets()
     verbs = sorted({verb for verb, _ in hourly}, key=lambda v: v.value)
 
-    lines = [f"\n  EXPLORE decisions: {len(arm.decisions):,}", "", "  retry x offset"]
+    lines = [
+        f"\n  EXPLORE {GATE_EXPLORE_CASES:,} cases, {len(arm.decisions):,} decisions,"
+        f" threshold N >= {MIN_OBSERVATIONS}",
+        "",
+        "  retry x offset",
+    ]
     lines.append("    " + " ".join(f"{o:>7}" for o in offsets))
     lines.append("    " + " ".join(f"{grid[(ActionType.RETRY, o)]:>7,}" for o in offsets))
     lines += ["", f"  action x 4h IST bucket   (. = unreachable, G1 shuts the window)"]
