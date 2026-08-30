@@ -155,6 +155,12 @@ Channel = sms | whatsapp | voice
 `do_nothing` is a first-class action and must be selectable. Any arm that cannot
 emit `do_nothing` is a baseline, not a policy.
 
+The agent's belief about liquidity (`liquidity_window_days_belief`) is a
+`POLICY_PARAMS` entry, deliberately distinct from the world's
+`world.liquidity_window_days`. The agent is not permitted to be right by
+construction: a policy handed the simulator's own parameter would demonstrate
+that we can read our own generator, not that a merchant could learn the effect.
+
 Actions carry no amount field. Partial or reduced debits against
 `mandate_cap_paise` are common in real recovery and are deliberately out of
 scope: a continuous amount dimension multiplies the action space and the
@@ -531,6 +537,25 @@ Coverage is reported per (action, hour_bucket) cell. Cells below a minimum
 observation threshold are flagged as EXTRAPOLATED in the reliability report and
 excluded from the headline calibration figures.
 
+**Retry timing — a measured negative result.** Retry timing was hypothesised as
+a primary differentiator and tested. Median predicted probability moves 3.7
+points across the eight declared offsets, p90 9.4 points. Timing features rank
+26–37 of 45 by permutation importance, an order of magnitude below decline
+class. The observed variation is a contact-window artefact — daytime beats 3am —
+not a liquidity curve. The cyclical encoding (`days_to_month_start`)
+outperformed the linear one and was still negligible.
+
+A coarse timing signal exists. A smooth liquidity curve does not. The claim that
+the policy learns payday timing is withdrawn. Reported in the README as a
+measured negative result.
+
+**Model selection is decided on uplift calibration, not overall.** §10.2
+subtracts `p_settle(do_nothing)` from every action, so the quantity the policy is
+sensitive to is the difference, not either term alone. LR wins overall
+(ECE 0.0189 vs 0.0225) and loses on `do_nothing` rows (0.0359 vs 0.0307).
+Selection is therefore made on the calibration of the uplift term itself. If the
+two models split, the hybrid ships and is stated explicitly rather than hidden.
+
 Reported: reliability diagram, ECE, Brier score.
 
 ### 10.2 Selection
@@ -619,6 +644,8 @@ degrading silently. Every run prints calls, cache hits, tokens, estimated cost.
 | G6 | Promise suppression window |
 | G7 | Opt-out honoured on every channel |
 | G8 | Dispute freeze |
+| S7 | Economic stop. Lives in `settle/agent/policy.py`, not in `stops.py`: it compares expected recovery against cost, which needs an EV, which needs the estimator. A pure stop cannot ask that question. |
+
 | G9 | e-mandate pre-debit notice. A served notice covers a notified debit window of 3 days from the notified date. Retries inside the window inherit the notice. Retries outside require fresh notice, which costs 24h lead time. G9 sequences the plan, it is not a checkbox. Window length ASSERTED, source in D4. A served notice is a full contact: subject to G1's window, counted against G2's frequency cap, and consuming patience_budget. ASSERTED. Consequence: outside an active window a compliant enach retry costs two of three weekly contacts. The alternative treatment (notice as regulatory overhead, exempt from G2) is recorded in Known Limitations. |
 
 | G10 | Class retry budget. Per-class cap on retries, distinct from G4's card-network cap. `ambiguous` = 1: §9 permits one retry at a different hour, then a message. Without this, `ambiguous` retries are unbounded until G4 or S3 fires. |
@@ -1129,3 +1156,6 @@ Resolved:
 - 2026-08-30 — A80: §11 — the escalation rate is measured against a corpus written independently of the classifier. Measured at CP7.0: 44.4% agreement, 72.2% escalation.
 - 2026-08-30 — A81: §10.1 — splits are by case; the natural-recovery confound is recorded with its measured base rates.
 - 2026-08-30 — A82: §10.2 — EV is uplift over `do_nothing`, which cancels the self-cure component. Attribution windows considered and rejected.
+- 2026-08-30 — A83: §10.1 — the retry-timing claim is withdrawn and recorded as a measured negative result.
+- 2026-08-30 — A84: §10.1 — model selection is decided on uplift calibration; a split ships a stated hybrid.
+- 2026-08-30 — A85: §5.3 and §13 — the agent's liquidity belief is its own POLICY_PARAMS entry; S7 lives in the policy because it needs an EV.

@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Final
 
 from settle.diagnose.taxonomy import classify
+from settle.policy.params import POLICY_PARAMS
 from settle.schema.action import Action, Retry, SendMessage, SwitchRail
 from settle.schema.enums import ActionType, Channel, DeclineClass, Rail
 from settle.schema.observed import ObservedCase
@@ -27,10 +28,10 @@ IST: Final = timezone(timedelta(hours=5, minutes=30))
 
 # The agent's own belief about how close to a salary credit still counts as
 # liquid. Deliberately NOT `world.liquidity_window_days`: that is the
-# simulator's parameter and the agent may not read it. This is a modelling
-# assumption the policy makes about the world, and it would be wrong for it to
-# be exactly right. ASSERTED; needs a POLICY_PARAMS row at CP8 — see §21.
-LIQUIDITY_WINDOW_DAYS: Final[int] = 1
+# simulator's parameter and the agent may not read it (A85). A policy handed
+# the generator's own number would demonstrate that we can read our own
+# simulator, not that a merchant could learn the effect.
+LIQUIDITY_WINDOW_DAYS: Final[int] = int(POLICY_PARAMS["liquidity_window_days_belief"])
 
 # Days in each month, for the distance-to-month-boundary feature. February is
 # 28 because `payday_day` is bounded to 1..28 (§5.2), so no salary lands on the

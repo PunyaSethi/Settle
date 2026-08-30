@@ -121,6 +121,14 @@ class Estimator:
         X = np.asarray([feature_vector(case, action, tick, last_attempt_tick)])
         return float(self.model.predict_proba(X)[0, 1])
 
+    def predict_pairs(
+        self, case: ObservedCase, actions: Sequence[Action], tick: int,
+        last_attempt_tick: int | None = None,
+    ) -> np.ndarray:
+        """P(settle) for many actions on one case, in a single call."""
+        X = np.asarray([feature_vector(case, a, tick, last_attempt_tick) for a in actions])
+        return self.model.predict_proba(X)[:, 1]
+
     def predict_many(self, X: np.ndarray) -> np.ndarray:
         return self.model.predict_proba(X)[:, 1]
 
@@ -141,3 +149,71 @@ def constant_rate_baseline(y_train: np.ndarray) -> float:
 
 
 assert len(FEATURE_NAMES) == len(set(FEATURE_NAMES)), "duplicate feature name"
+
+
+# ---------------------------------------------------------------------------
+# Uplift calibration. SPEC §10.1 (A84).
+# ---------------------------------------------------------------------------
+
+def uplift_calibration(
+    model, rows: Sequence[tuple], X: np.ndarray, y: np.ndarray,
+    test_rows: Sequence[int], bins: int = 10, p0_bins: int = 20,
+) -> dict:
+    """Calibration of the *difference*, which is what §10.2 actually uses.
+
+    Uplift is not observable per row — one case has one outcome, not two — so it
+    is estimated the standard way: bin by predicted uplift, and compare the
+    treated rate against a control rate matched on `p_settle(do_nothing)`.
+    Matching on `p_0` matters because treated and control rows are not
+    exchangeable: EXPLORE acts more often on cases it has more options for.
+
+    This is an estimate with real assumptions, not a measurement. It is reported
+    as one.
+    """
+    from settle.schema.action import DoNothing
+
+    idx = np.asarray(test_rows)
+    p_action = model.predict_many(X[idx])
+    p0 = np.asarray(
+        [model.predict_proba(rows[i][0], DoNothing(), rows[i][2], rows[i][3]) for i in idx]
+    )
+    uplift = p_action - p0
+    outcomes = y[idx]
+    treated = np.asarray([rows[i][1].type.value != "do_nothing" for i in idx])
+
+    # Control rate per p_0 bucket, from the do_nothing rows only.
+    control_rate: dict[int, float] = {}
+    p0_bucket = np.minimum((p0 * p0_bins).astype(int), p0_bins - 1)
+    for bucket in range(p0_bins):
+        members = outcomes[(~treated) & (p0_bucket == bucket)]
+        if len(members):
+            control_rate[bucket] = float(members.mean())
+
+    counterfactual = np.asarray(
+        [control_rate.get(int(b), float(outcomes[~treated].mean())) for b in p0_bucket]
+    )
+
+    table, total, error = [], 0, 0.0
+    t_uplift, t_outcome, t_counter = uplift[treated], outcomes[treated], counterfactual[treated]
+    if len(t_uplift):
+        edges = np.quantile(t_uplift, np.linspace(0, 1, bins + 1))
+        for i in range(bins):
+            lo, hi = edges[i], edges[i + 1]
+            mask = (t_uplift >= lo) & (t_uplift <= hi if i == bins - 1 else t_uplift < hi)
+            n = int(mask.sum())
+            if not n:
+                continue
+            predicted = float(t_uplift[mask].mean())
+            realised = float(t_outcome[mask].mean() - t_counter[mask].mean())
+            table.append({"bin": i, "n": n, "predicted": predicted, "realised": realised})
+            total += n
+            error += n * abs(predicted - realised)
+
+    return {
+        "ece_uplift": error / total if total else 0.0,
+        "brier_uplift": float(
+            np.mean(((t_outcome - t_counter) - t_uplift) ** 2) if len(t_uplift) else 0.0
+        ),
+        "n_treated": int(treated.sum()),
+        "table": table,
+    }

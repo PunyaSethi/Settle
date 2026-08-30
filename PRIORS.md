@@ -193,6 +193,31 @@ PAR-1 checks this table against it in both directions.
 | min_contact_gap_hours | 20 | ASSERTED | 2026-08-29 | pending D4 |
 | notice_window_days | 3 | ASSERTED | 2026-08-29 | pending D4 |
 | decision_cadence_hours | 24 | ASSERTED | 2026-08-29 | pending D4 |
+| action_cost.do_nothing | 0 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.retry | 5 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.switch_rail | 5 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.send_message.sms | 15 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.send_message.whatsapp | 35 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.request_mandate_update.sms | 15 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.request_mandate_update.whatsapp | 35 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.serve_notice.sms | 15 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.serve_notice.whatsapp | 35 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.voice_call | 400 | ASSERTED | 2026-08-30 | pending D4 |
+| action_cost.escalate_human | 5000 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.do_nothing | 0 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.retry | 0 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.switch_rail | 0 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.send_message.sms | 0.004 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.send_message.whatsapp | 0.006 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.request_mandate_update.sms | 0.004 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.request_mandate_update.whatsapp | 0.006 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.serve_notice.sms | 0.003 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.serve_notice.whatsapp | 0.004 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.voice_call | 0.031 | ASSERTED | 2026-08-30 | pending D4 |
+| p_opt_out.escalate_human | 0.018 | ASSERTED | 2026-08-30 | pending D4 |
+| ltv_months | 8 | ASSERTED | 2026-08-30 | pending D4 |
+| economic_stop_multiple | 3 | ASSERTED | 2026-08-30 | pending D4 |
+| liquidity_window_days_belief | 1 | ASSERTED | 2026-08-30 | pending D4 |
 | action_grid.offset_now | 0 | ASSERTED | 2026-08-29 | pending D4 |
 | action_grid.offset_later_today | 6 | ASSERTED | 2026-08-29 | pending D4 |
 | action_grid.offset_next_morning | 18 | ASSERTED | 2026-08-29 | pending D4 |
@@ -211,15 +236,7 @@ PAR-1 checks this table against it in both directions.
 
 ### Cost and opt-out parameters
 
-SPEC §20. These price actions and derive opt-out cost.
-
-| parameter | value | source | date | sensitivity |
-|---|---|---|---|---|
-| ltv_months |  | ASSERTED | pending D4 |  |
-| p_opt_out_send_message_sms |  | ASSERTED | pending D4 |  |
-| p_opt_out_send_message_whatsapp |  | ASSERTED | pending D4 |  |
-| p_opt_out_request_mandate_update_sms |  | ASSERTED | pending D4 |  |
-| p_opt_out_request_mandate_update_whatsapp |  | ASSERTED | pending D4 |  |
-| p_opt_out_serve_notice_sms |  | ASSERTED | pending D4 |  |
-| p_opt_out_voice_call |  | ASSERTED | pending D4 |  |
-| p_opt_out_escalate_human |  | ASSERTED | pending D4 |  |
+Superseded at CP8. §20's cost table and the `p_opt_out` priors now live in
+`POLICY_PARAMS` above, where PAR-1 checks them against the code in both
+directions. They sat here as blank rows for four checkpoints, which is how a
+number stays unsourced without anyone noticing.

@@ -13,7 +13,7 @@ enforces the correspondence with PRIORS.md in both directions.
 
 from typing import Final
 
-from settle.schema.enums import DeclineClass
+from settle.schema.enums import ActionType, Channel, DeclineClass
 
 POLICY_PARAMS: Final[dict[str, float]] = {
     # G4 — card network rules cap retries on a declined credential.
@@ -63,6 +63,42 @@ POLICY_PARAMS: Final[dict[str, float]] = {
     "action_grid.offset_one_week": 168,
     # Nothing may be scheduled past the horizon the agent stops acting at.
     "action_grid.max_horizon_h": 720,
+    # --- §20 cost model, keyed on (ActionType, Channel|null) as A36 requires ---
+    # These were a table in SPEC and nowhere in code until the policy needed
+    # them. All ASSERTED pending D4.
+    "action_cost.do_nothing": 0,
+    "action_cost.retry": 5,
+    "action_cost.switch_rail": 5,
+    "action_cost.send_message.sms": 15,
+    "action_cost.send_message.whatsapp": 35,
+    "action_cost.request_mandate_update.sms": 15,
+    "action_cost.request_mandate_update.whatsapp": 35,
+    "action_cost.serve_notice.sms": 15,
+    "action_cost.serve_notice.whatsapp": 35,
+    "action_cost.voice_call": 400,
+    "action_cost.escalate_human": 5000,
+    # P(opt_out | action). A26: opt-out cost is DERIVED per action from this and
+    # LTV, never from nuisance units multiplied by a tuned constant.
+    "p_opt_out.do_nothing": 0.0,
+    "p_opt_out.retry": 0.0,
+    "p_opt_out.switch_rail": 0.0,
+    "p_opt_out.send_message.sms": 0.004,
+    "p_opt_out.send_message.whatsapp": 0.006,
+    "p_opt_out.request_mandate_update.sms": 0.004,
+    "p_opt_out.request_mandate_update.whatsapp": 0.006,
+    "p_opt_out.serve_notice.sms": 0.003,
+    "p_opt_out.serve_notice.whatsapp": 0.004,
+    "p_opt_out.voice_call": 0.031,
+    "p_opt_out.escalate_human": 0.018,
+    # LTV = plan_value_paise x ltv_months (A26).
+    "ltv_months": 8,
+    # S7 — §13: expected recovery below this multiple of cost is not worth taking.
+    "economic_stop_multiple": 3,
+    # The agent's BELIEF about how close to a salary credit still counts as
+    # liquid. Deliberately not `world.liquidity_window_days` (A85): a policy
+    # handed the simulator's own parameter would demonstrate that we can read
+    # our own generator, not that a merchant could learn the effect.
+    "liquidity_window_days_belief": 1,
 }
 
 _GRID_PREFIX = "action_grid.offset_"
@@ -90,3 +126,43 @@ def max_horizon_h() -> int:
 def class_retry_cap(decline_class: DeclineClass) -> int:
     """G10's cap for a class."""
     return int(POLICY_PARAMS[f"class_retry_cap.{decline_class.value}"])
+
+
+def action_cost_paise(action_type: ActionType, channel: Channel | None = None) -> int:
+    """§20's cost table, keyed on (ActionType, Channel|null)."""
+    if channel is not None:
+        keyed = f"action_cost.{action_type.value}.{channel.value}"
+        if keyed in POLICY_PARAMS:
+            return int(POLICY_PARAMS[keyed])
+    bare = f"action_cost.{action_type.value}"
+    if bare in POLICY_PARAMS:
+        return int(POLICY_PARAMS[bare])
+    # Channel-keyed verb asked about without a channel. Fall back to the
+    # cheapest variant rather than raising mid-run: a missing price must not
+    # take down a batch, and understating it cannot flatter the policy.
+    prefix = f"{bare}."
+    return min(int(v) for k, v in POLICY_PARAMS.items() if k.startswith(prefix))
+
+
+def p_opt_out(action_type: ActionType, channel: Channel | None = None) -> float:
+    """P(opt_out | action). A26 — stated per action, never derived from a
+    nuisance-unit multiplier, which would smuggle in an empirical claim as a
+    unit conversion."""
+    if channel is not None:
+        keyed = f"p_opt_out.{action_type.value}.{channel.value}"
+        if keyed in POLICY_PARAMS:
+            return float(POLICY_PARAMS[keyed])
+    bare = f"p_opt_out.{action_type.value}"
+    if bare in POLICY_PARAMS:
+        return float(POLICY_PARAMS[bare])
+    # The *highest* variant when the channel is unknown: understating opt-out
+    # risk is the error that makes a policy over-contact.
+    prefix = f"{bare}."
+    return max(float(v) for k, v in POLICY_PARAMS.items() if k.startswith(prefix))
+
+
+def opt_out_cost_paise(
+    action_type: ActionType, plan_value_paise: int, channel: Channel | None = None
+) -> float:
+    """A26: `P(opt_out | action) x LTV`, and LTV is `plan_value x ltv_months`."""
+    return p_opt_out(action_type, channel) * plan_value_paise * POLICY_PARAMS["ltv_months"]

@@ -1,0 +1,18 @@
+# CP8 — the OURS policy: uplift EV over the gate-passing grid, S7, first real
+# five-arm comparison.
+
+SPEC.md
+PRIORS.md
+settle/agent/policy.py
+settle/agent/estimator.py
+settle/policy/params.py
+settle/policy/stops.py
+settle/runner/arms/ours.py
+tests/test_policy.py
+tests/test_ours.py
+checkpoints/cp8.allowlist
+
+# --- outside the stated allowlist, and why --------------------------------
+# A85 moves the agent's liquidity belief into POLICY_PARAMS. features.py
+# defined its own constant; leaving it would give the value two sources.
+settle/agent/features.py
