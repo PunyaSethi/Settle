@@ -507,6 +507,20 @@ the fact: legality is joint over action and hour — G1 constrains hours, and G9
 constrains them further on `enach` — so it does not factor, and any formula
 would be free to drift from the sampler.
 
+Splits are by **case**, never by row. Rows from one case share hidden truth —
+the same `true_recoverability`, the same `payday_day`, the same debtor — so
+splitting by row puts sibling rows either side of the boundary, the model scores
+well by having memorised the case, and every metric comes out optimistic with
+nothing warning you.
+
+**The natural-recovery confound.** A case that self-cures (§14.3) settles
+whatever the arm did, so every row from it labels `settled=True` and teaches the
+model that the action worked. Measured at CP7: self-cured cases carry a 0.99 base
+rate against 0.52 for the rest, and are 21.8% of training rows. The estimator is
+therefore predicting *whether this case settles*, not *whether this action causes
+settlement*. Those are different questions and only the second is a policy. The
+label must become action-attributed before the estimator drives OURS.
+
 Rows where `do_nothing` was the only legal gate-passing option are not
 decisions; they are the absence of one. 78.6% of EXPLORE's ticks are such rows,
 and training on them teaches the model to predict inaction rather than to
@@ -1096,3 +1110,4 @@ Resolved:
 - 2026-08-30 — A78: §14.3 records natural recovery as the mechanism that makes incremental scoring meaningful; `world.natural_recovery` added with per-intent priors.
 - 2026-08-30 — A79: §5.5 `ReportedOutcome` carries `reply_text`; §11 records the deterministic classifier and the escalation rate it reports.
 - 2026-08-30 — A80: §11 — the escalation rate is measured against a corpus written independently of the classifier. Measured at CP7.0: 44.4% agreement, 72.2% escalation.
+- 2026-08-30 — A81: §10.1 — splits are by case; the natural-recovery confound is recorded with its measured base rates.

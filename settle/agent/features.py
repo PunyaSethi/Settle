@@ -1,0 +1,133 @@
+"""Feature construction. SPEC §10.1.
+
+Every feature is something a real merchant could compute at decision time from
+its own records. Nothing here reads `HiddenTruth`, and nothing here imports
+`settle.sim` — EST-1 walks the AST to prove it. A model that could see
+`payday_day` would predict liquidity timing perfectly and teach us nothing about
+whether the timing signal is learnable from what a merchant actually has.
+
+`day_of_month_at_dispatch` is the one that carries that question. Payday
+clusters on the 1st and the 7th (§5.2), and a model given the day of month at
+dispatch can in principle learn the liquidity window without ever seeing the
+payday itself. If it learns nothing from it, that is a finding about the
+feature set, and it gets reported rather than hidden.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Final
+
+from settle.diagnose.taxonomy import classify
+from settle.schema.action import Action, Retry, SendMessage, SwitchRail
+from settle.schema.enums import ActionType, Channel, DeclineClass, Rail
+from settle.schema.observed import ObservedCase
+
+IST: Final = timezone(timedelta(hours=5, minutes=30))
+
+_RAILS: Final = tuple(Rail)
+_CLASSES: Final = tuple(DeclineClass)
+_ACTIONS: Final = tuple(ActionType)
+_CHANNELS: Final = tuple(Channel)
+
+FEATURE_NAMES: Final[tuple[str, ...]] = (
+    # --- the case, as the merchant records it ---
+    "amount_paise",
+    "log_amount",
+    "plan_value_paise",
+    "attempt_number",
+    "tenure_months",
+    "prior_failures",
+    "prior_recoveries",
+    "consent_whatsapp",
+    "dnd_flag",
+    "observed_credit_day",
+    "observed_credit_day_known",
+    "mandate_cap_known",
+    *(f"rail_{r.value}" for r in _RAILS),
+    *(f"class_{c.value}" for c in _CLASSES),
+    # --- the action under consideration ---
+    *(f"action_{a.value}" for a in _ACTIONS),
+    "offset_hours",
+    *(f"target_rail_{r.value}" for r in _RAILS),
+    *(f"channel_{c.value}" for c in _CHANNELS),
+    "channel_none",
+    # --- when it would land ---
+    "ist_hour_at_dispatch",
+    "day_of_month_at_dispatch",
+    "days_since_created",
+    "inside_contact_window",
+)
+
+
+def action_offset(action: Action) -> int:
+    """Hours between the decision and the dispatch. Only `retry` schedules."""
+    return action.at_hour_offset if isinstance(action, Retry) else 0
+
+
+def target_rail(case: ObservedCase, action: Action) -> Rail:
+    if isinstance(action, Retry):
+        return action.rail
+    if isinstance(action, SwitchRail):
+        return action.to
+    return case.rail
+
+
+def action_channel(action: Action) -> Channel | None:
+    return getattr(action, "channel", None)
+
+
+def dispatch_moment(case: ObservedCase, action: Action, tick: int) -> datetime:
+    """When the action would actually land, in the case's own frame.
+
+    `tick + offset`, never a clock. A feature derived from wall time would make
+    the model unreproducible and the ledger unreplayable.
+    """
+    return case.created_at + timedelta(hours=tick + action_offset(action))
+
+
+def feature_row(case: ObservedCase, action: Action, tick: int) -> dict[str, float]:
+    """One row, from `ObservedCase` + `Action` + `tick` and nothing else."""
+    at = dispatch_moment(case, action, tick)
+    ist = at.astimezone(IST)
+    decline_class = classify(case.decline_code)
+    channel = action_channel(action)
+    offset = action_offset(action)
+    row: dict[str, float] = {
+        "amount_paise": float(case.amount_paise),
+        "log_amount": float(len(str(case.amount_paise))),
+        "plan_value_paise": float(case.plan_value_paise),
+        "attempt_number": float(case.attempt_number),
+        "tenure_months": float(case.tenure_months),
+        "prior_failures": float(case.prior_failures),
+        "prior_recoveries": float(case.prior_recoveries),
+        "consent_whatsapp": float(case.consent_whatsapp),
+        "dnd_flag": float(case.dnd_flag),
+        # Unknown is encoded as 0 *and* flagged, so the model can tell "the
+        # first of the month" from "we have no idea".
+        "observed_credit_day": float(case.observed_credit_day or 0),
+        "observed_credit_day_known": float(case.observed_credit_day is not None),
+        "mandate_cap_known": float(case.mandate_cap_paise is not None),
+        "offset_hours": float(offset),
+        "ist_hour_at_dispatch": float(ist.hour),
+        "day_of_month_at_dispatch": float(ist.day),
+        "days_since_created": float((tick + offset) / 24.0),
+        "inside_contact_window": float(8 <= ist.hour < 19),
+        "channel_none": float(channel is None),
+    }
+    for rail in _RAILS:
+        row[f"rail_{rail.value}"] = float(case.rail is rail)
+        row[f"target_rail_{rail.value}"] = float(target_rail(case, action) is rail)
+    for cls in _CLASSES:
+        row[f"class_{cls.value}"] = float(decline_class is cls)
+    for action_type in _ACTIONS:
+        row[f"action_{action_type.value}"] = float(action.type is action_type)
+    for chan in _CHANNELS:
+        row[f"channel_{chan.value}"] = float(channel is chan)
+    return row
+
+
+def feature_vector(case: ObservedCase, action: Action, tick: int) -> list[float]:
+    """The row as an ordered vector, in `FEATURE_NAMES` order."""
+    row = feature_row(case, action, tick)
+    return [row[name] for name in FEATURE_NAMES]

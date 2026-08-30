@@ -1,0 +1,12 @@
+# CP7 — the estimator. No policy; estimator only.
+
+SPEC.md
+PRIORS.md
+settle/agent/__init__.py
+settle/agent/features.py
+settle/agent/estimator.py
+settle/agent/train.py
+settle/agent/calibration.py
+tests/test_features.py
+tests/test_estimator.py
+checkpoints/cp7.allowlist
