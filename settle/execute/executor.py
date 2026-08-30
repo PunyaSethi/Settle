@@ -20,20 +20,24 @@ heard nothing", which is not the same as "nothing happened". That gap is the
 project.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Final
 
 from settle.policy.gates import idempotency_key
+from settle.sim.generator import PARAMS
 from settle.policy.legal import is_debit
 from settle.schema.action import Action
 from settle.schema.enums import ReportedStatus
 from settle.schema.observed import ObservedCase
 from settle.schema.outcome import ReportedOutcome
 from settle.schema.state import CaseState, as_of
-from settle.sim.observability import ObservabilityConfig
+from settle.sim.observability import ObservabilityConfig, report
 from settle.sim.streams import Streams
-from settle.sim.truth import HiddenTruth
-from settle.sim.world import attempt
+from settle.sim.truth import ActualOutcome, HiddenTruth
+from settle.sim.world import attempt, reversal_at
+
+REVERSAL_DELAY_DAYS_MAX: Final[int] = int(PARAMS["reversal_delay_days_max"])
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,10 @@ class WorldHandle:
 
     truth: HiddenTruth
     streams: Streams
+    # Where the world's own account of events is recorded, for reconciliation to
+    # read afterwards. The runner passes this through without opening it — it is
+    # entitled to `ReportedOutcome` and nothing else (RUN-9).
+    actuals: list[tuple[ActualOutcome, datetime | None]] = field(default_factory=list)
 
 
 def dispatch_key(case: ObservedCase, state: CaseState, action: Action) -> str:
@@ -69,56 +77,29 @@ def execute(
     at = as_of(case.created_at, state)
 
     if not is_debit(action):
-        return _report(case, at, settled_amount=None, authorised=False, world=world,
-                       observability=observability, tick=state.tick)
-
-    result = attempt(case, world.truth, action, at, state.tick, world.streams)
-    return _report(
-        case,
-        at,
-        settled_amount=case.amount_paise if result.authorised else None,
-        authorised=result.authorised,
-        world=world,
-        observability=observability,
-        tick=state.tick,
-    )
-
-
-def _report(
-    case: ObservedCase,
-    at: datetime,
-    *,
-    settled_amount: int | None,
-    authorised: bool,
-    world: WorldHandle,
-    observability: ObservabilityConfig,
-    tick: int,
-) -> ReportedOutcome:
-    """Push an outcome through the observability layer. SPEC §6.
-
-    A dropped webhook does not become a failure — it becomes silence. The agent
-    cannot tell the two apart, and that is exactly the condition §7's SF-2
-    describes: chasing a customer who has already paid.
-    """
-    if not authorised:
-        return ReportedOutcome(
-            case_id=case.case_id, at=at, status=ReportedStatus.FAILED, arrival_count=1
-        )
-
-    if world.streams.value(case.case_id, "webhook_drop", tick) < observability.webhook_drop_rate:
         return ReportedOutcome(
             case_id=case.case_id, at=at, status=ReportedStatus.NONE, arrival_count=1
         )
 
-    duplicated = (
-        world.streams.value(case.case_id, "webhook_dup", tick)
-        < observability.webhook_duplicate_rate
-    )
-    return ReportedOutcome(
+    result = attempt(case, world.truth, action, at, state.tick, world.streams)
+    if not result.authorised or result.actual is None:
+        return ReportedOutcome(
+            case_id=case.case_id, at=at, status=ReportedStatus.FAILED, arrival_count=1
+        )
+
+    actual = result.actual
+    reversed_when: datetime | None = None
+    if actual.settled and actual.reversed and actual.settled_at is not None:
+        reversed_when = reversal_at(
+            case, actual.settled_at, state.tick, world.streams, REVERSAL_DELAY_DAYS_MAX
+        )
+    world.actuals.append((actual, reversed_when))
+
+    return report(
+        actual,
         case_id=case.case_id,
-        at=at,
-        status=ReportedStatus.CAPTURED,
-        payment_id=f"pay_{case.case_id}_{tick}",
-        amount_paise=settled_amount,
-        arrival_count=2 if duplicated else 1,
+        tick=state.tick,
+        config=observability,
+        streams=world.streams,
+        authorised_at=at,
     )

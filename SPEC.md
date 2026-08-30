@@ -79,7 +79,7 @@ Each has a named test.
 | INV-5 | Audit entry is written BEFORE dispatch, never after |
 | INV-6 | Audit chain verifies: every entry references the previous entry's hash |
 | INV-7 | No contact between a logged promise and its promise date |
-| INV-8 | Hidden truth is never readable by any module under `settle/agent/` |
+| INV-8 | Hidden truth is readable by exactly three packages: `settle/sim/` constructs it, `settle/execute/` is the world boundary that produces it, and `settle/recon/` compares belief against it (§7). Every other package — `agent`, `policy`, `schema`, `runner`, `audit`, `diagnose` — is banned from importing `settle.sim.truth`. |
 | INV-9 | In arm OURS, no LLM output is ever an action. The text reader emits spans over text only. The LLM-STRAT ablation arm proposes actions by design; those proposals are clamped to the closed verb set of §5.3 by a deterministic adapter and pass the same gates in ENFORCE mode. |
 | INV-10 | Every numeric prior in the model traces to a cited source or is marked ASSERTED |
 | INV-11 | Arm OURS can never run in OBSERVE mode. Asserted by test. |
@@ -375,6 +375,24 @@ ledger against `ActualOutcome`, independently of the executor.
 | SF-5 | Dispatch after opt-out | Compliance breach |
 | SF-6 | Dispatch outside contact window | Compliance breach |
 | SF-7 | Recovered then reversed, case never reopened | Overstated revenue |
+
+**Reconciliation runs at `observation_horizon_days` (60), not at the decision
+horizon (30).** Settlements land late and reversals land later; a reconciler
+that stopped when the agent stopped acting could not see the tail it exists to
+audit. An outcome landing past day 60 is marked `censored` and reported as such,
+never guessed.
+
+`settle/recon/` is permitted to import `settle.sim.truth` — a narrow, named
+extension of INV-8's permitted set, which is exactly `sim`, `execute` and
+`recon`. `execute` has held that access since CP4 as the world boundary; INV-8's
+wording had not named it, which is how an exception becomes a habit. It exists to compare
+what was believed against what happened, which is impossible without both. The
+exception is exactly this package and no other, and REC-6 asserts no third
+module has quietly joined it. An unstated exception is how INV-8 dies.
+
+SF-5 and SF-6 are different in kind from the rest. They are compliance breaches,
+and for any arm in ENFORCE they must be zero. A non-zero SF-5 or SF-6 for OURS
+is a gate failure, not an audit finding, and the run says so loudly.
 
 `silent_failure_rate` is reported in the headline metrics table, not in an
 appendix. The demo batch contains deliberately seeded instances of each class so
@@ -904,10 +922,16 @@ Resolved inside the checkpoint that reaches them, not by further spec amendment.
 | OQ-5 | A22's perturbed generator variant needs a named perturbation set — which parameters, shifted how far — fixed before the estimator is trained. Otherwise it is a check that can be quietly weakened until it passes. | D2 |
 | OQ-6 | Razorpay's default settlement cycle is publicly documented. `settlement_lag_h` should be a cited prior, not ASSERTED, and the recon-report availability lag should be folded into it. Cheap INV-10 win. | D4 |
 | OQ-20 | `settlement_lag_reporting` and `reversal_reporting_delay` are declared but unconsumed until the D3 reporting layer exists. GEN-4 cannot detect a dead parameter. Add a liveness check to the D3 checkpoint asserting every observability parameter is read by at least one code path. | D3 |
+| OQ-34 | §14.2's named stream list has `webhook_drop` and `webhook_dup` but not `out_of_order`, and `streams.py` closes that list. The reporting layer draws it from its own address instead, so it is not shared across arms the way the other reporting draws are. Add it to the stream set. | D3 |
 | OQ-31 | Only `retry` carries a schedulable offset in §5.3's frozen verb set, so contacts are never scheduled to a chosen hour — the grid's offset dimension covers debits only. Widening it is a §5.3 amendment, and OURS may not need it. | CP8 |
 
 Resolved:
 
+- OQ-20 — `settlement_lag_reporting` and `reversal_reporting_delay` were
+  declared and read by nothing. Resolved at CP6: all five reporting parameters
+  are applied in `observability.report()`, and OBS-1 asserts each is read.
+- OQ-28 — nothing could set `settled`, so S1 could never fire. Resolved at CP6:
+  reconciliation is the only thing entitled to say a case recovered.
 - OQ-30 — `at_hour_offset` was a label: the runner dispatched immediately and
   used it only as a wake-up hint, so the offset dimension of the action grid
   carried no behaviour for an estimator to learn. Resolved by A73: a schedulable
@@ -1031,3 +1055,5 @@ Resolved:
 - 2026-08-30 — A73: §5.7 `Scheduled` added — a schedulable choice is a commitment that fires at `due_tick` and is re-gated on arrival. Resolves OQ-30.
 - 2026-08-30 — A74: §12 G5's idempotency key is built from `due_tick`, so rescheduling the same action is not a duplicate.
 - 2026-08-30 — A75: §10.1 — the estimator trains only on rows where the choice set had more than one member. Resolves OQ-33.
+- 2026-08-30 — A76: §7 — reconciliation runs at the 60-day observation horizon; censoring is reported, never guessed.
+- 2026-08-30 — A77: INV-8 names `settle/recon/` as its single exception, and §7 records why. Resolves OQ-20 and OQ-28.

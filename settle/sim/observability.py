@@ -24,9 +24,15 @@ this layer owns only how late it hears about either.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from settle.schema.enums import ReportedStatus
+from settle.schema.outcome import ReportedOutcome
+from settle.sim.streams import Streams, derive_unit_float
+from settle.sim.truth import ActualOutcome
 
 REPORTING_PARAMETERS: Final[tuple[str, ...]] = (
     "webhook_drop_rate",
@@ -79,3 +85,79 @@ OBSERVABILITY_DEFAULTS: Final[dict[str, float]] = {
     f"observability.{name}": ObservabilityConfig.model_fields[name].default
     for name in REPORTING_PARAMETERS
 }
+
+
+# How far back an out-of-order report is shifted. Structure, not a prior: the
+# parameter that carries the number is `out_of_order_rate`, and this is only the
+# shape of the inversion it produces.
+OUT_OF_ORDER_SHIFT_HOURS: Final[int] = 6
+
+
+def report(
+    actual: ActualOutcome,
+    *,
+    case_id: str,
+    tick: int,
+    config: ObservabilityConfig,
+    streams: Streams,
+    authorised_at: datetime,
+    authorised: bool = True,
+) -> ReportedOutcome:
+    """Push one outcome through the reporting layer. SPEC §6.
+
+    Every one of the five parameters is applied here, which is the point: until
+    CP6 two of them were declared, carried a PRIORS row implying they mattered,
+    and were read by nothing. A parameter nobody reads is worse than a literal —
+    it looks like evidence.
+
+    A drop does not become a failure. It becomes silence: `status == "none"`
+    means "we heard nothing", which the agent cannot distinguish from "nothing
+    happened". That gap is SF-2, and it is the whole project.
+    """
+    if not authorised:
+        return ReportedOutcome(
+            case_id=case_id, at=authorised_at, status=ReportedStatus.FAILED, arrival_count=1
+        )
+
+    # A gateway reports an authorisation, not a settlement. An authorisation
+    # that never becomes money is still reported `captured`, which is the whole
+    # mechanism behind SF-1 and the reason INV-1 refuses to treat the two as the
+    # same thing (§6, auth_no_settle_rate).
+
+    if streams.value(case_id, "webhook_drop", tick) < config.webhook_drop_rate:
+        return ReportedOutcome(
+            case_id=case_id, at=authorised_at, status=ReportedStatus.NONE, arrival_count=1
+        )
+
+    # The confirmation arrives after the money does. This is the reporting lag,
+    # not the settlement lag: the world's is `settlement_lag_h.mean` in PARAMS.
+    reported_at = authorised_at + timedelta(hours=config.settlement_lag_reporting)
+
+    # Out of order: the report is stamped before an event that preceded it, so a
+    # consumer sorting by `at` reconstructs the wrong sequence.
+    # §14.2's named stream list has `webhook_drop` and `webhook_dup` but not
+    # `out_of_order`, and `streams.py` closes that list deliberately. Drawn from
+    # its own address until the omission is fixed — see OQ-34.
+    if derive_unit_float(streams.master_seed, "out_of_order", case_id, tick) < config.out_of_order_rate:
+        reported_at = reported_at - timedelta(hours=OUT_OF_ORDER_SHIFT_HOURS)
+
+    duplicated = (
+        streams.value(case_id, "webhook_dup", tick) < config.webhook_duplicate_rate
+    )
+    return ReportedOutcome(
+        case_id=case_id,
+        at=reported_at,
+        status=ReportedStatus.CAPTURED,
+        payment_id=f"pay_{case_id}_{tick}",
+        amount_paise=actual.amount_paise if actual.settled else None,
+        arrival_count=2 if duplicated else 1,
+    )
+
+
+def reversal_reported_at(reversed_at: datetime, config: ObservabilityConfig) -> datetime:
+    """When a reversal becomes visible. SPEC §6.
+
+    Read by reconciliation: SF-7 asks whether the agent could have reopened the
+    case, which depends on when it could have known, not on when the money moved.
+    """
+    return reversed_at + timedelta(hours=config.reversal_reporting_delay)

@@ -1,0 +1,20 @@
+# CP6 — reconciliation and the silent-failure auditor. Reconciliation is the
+# only thing entitled to say a case recovered.
+
+SPEC.md
+PRIORS.md
+settle/recon/__init__.py
+settle/recon/reconcile.py
+settle/recon/silent_failures.py
+settle/sim/observability.py
+settle/runner/case_runner.py
+settle/schema/state.py
+tests/test_recon.py
+tests/test_silent_failures.py
+checkpoints/cp6.allowlist
+
+# --- outside the stated allowlist, and why --------------------------------
+# Part A requires the five reporting parameters applied "before the runner sees
+# it". That boundary is the executor: it is the only module that touches the
+# world, and it is where ActualOutcome is produced for reconciliation to read.
+settle/execute/executor.py
