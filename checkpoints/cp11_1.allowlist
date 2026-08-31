@@ -1,0 +1,36 @@
+# CP11.1 — carry-forward from the CP11 sourcing pass. Done with numbers.
+#
+# Everything here came out of Part A. The sourcing pass was worth running for
+# what it found in our own model, not only for what it could cite:
+#
+#   F6   EXE-1 gains settle/eval/sensitivity.py as a third named world reader,
+#        with the reason recorded in the list rather than only in a commit.
+#   A96  settlement_lag_h.mean 38 -> 56. The old value was faster than the
+#        settlement cycle we would have cited for it. Row reclassified DERIVED.
+#        Moved one SF-7 case on B2 and nothing else — measured, in SPEC §15.3.
+#   A97  G9 implements RBI's 24-hour pre-debit lead. notice_lead_hours joins
+#        POLICY_PARAMS as the project's first and only SOURCED prior. Moved no
+#        arm's numbers, which is the intended result: the rule now holds because
+#        it is enforced rather than because decision_cadence_hours and the lead
+#        happen to both be 24.
+#   A98  The G1 / TRAI time-band ambiguity is recorded, NOT guessed at. The
+#        window is unchanged.
+#   A99  §15.2 records the exposure finding verbatim.
+#   A100 §15.1 records the sourcing outcome plainly: 188 rows, 1 SOURCED,
+#        3 DERIVED, 184 ASSERTED, and why that is structural.
+
+tests/test_ledger.py
+settle/eval/sensitivity.py
+settle/sim/generator.py
+settle/policy/gates.py
+settle/policy/params.py
+tests/test_gates.py
+PRIORS.md
+SPEC.md
+checkpoints/cp11_1.allowlist
+
+# --- carried from CP11, which is not yet committed -------------------------
+# The gate's baseline is HEAD (CP10), so CP11's files still read as changed.
+# Their justification is in checkpoints/cp11.allowlist.
+tests/test_sensitivity.py
+checkpoints/cp11.allowlist

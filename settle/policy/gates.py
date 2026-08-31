@@ -59,6 +59,7 @@ FREQUENCY_CAP_PER_WINDOW: Final[int] = int(POLICY_PARAMS["frequency_cap_per_wind
 FREQUENCY_WINDOW_HOURS: Final[int] = int(POLICY_PARAMS["frequency_window_hours"])
 MIN_CONTACT_GAP_HOURS: Final[int] = int(POLICY_PARAMS["min_contact_gap_hours"])
 CARD_NETWORK_RETRY_CAP: Final[int] = int(POLICY_PARAMS["card_network_retry_cap"])
+NOTICE_LEAD_HOURS: Final[int] = int(POLICY_PARAMS["notice_lead_hours"])
 NOTICE_WINDOW_DAYS: Final[int] = int(POLICY_PARAMS["notice_window_days"])
 
 
@@ -262,6 +263,21 @@ def gate_g8(case: ObservedCase, state: CaseState, action: Action) -> GateVerdict
 # G9 — e-mandate pre-debit notice
 # ---------------------------------------------------------------------------
 
+def notice_window_opens_at(state: CaseState) -> datetime | None:
+    """When a served notice's debit window opens. A97.
+
+    Derived from `notice_window_until` rather than recorded beside it, because
+    the two are locked together by construction: `after_serve_notice` sets the
+    end from the start and this function inverts it with the same constant. The
+    cleaner shape is a `notice_window_from` field on `CaseState`, and §5.7 is
+    outside CP11.1's allowlist — recorded so the compromise is visible rather
+    than discovered. The arithmetic lives here once so that no caller repeats it.
+    """
+    if state.notice_window_until is None:
+        return None
+    return state.notice_window_until - timedelta(days=NOTICE_WINDOW_DAYS)
+
+
 def gate_g9(case: ObservedCase, state: CaseState, action: Action) -> GateVerdict:
     """A debit outside an active notice window is blocked. SPEC §12.
 
@@ -269,6 +285,14 @@ def gate_g9(case: ObservedCase, state: CaseState, action: Action) -> GateVerdict
     spend a contact on `serve_notice` first, and that contact costs G2 budget and
     patience. The cost is the point — an executor that served notices implicitly
     would hide it from the decision.
+
+    Three ways to fail, not two (A97). The notice can be missing, the debit can
+    be *too early* — inside RBI's 24-hour pre-transaction lead — or the window
+    can have expired. The middle one was unenforced until CP11.1: the window
+    opened at the moment of service, and the runner's 24-hour decision cadence
+    happened to keep every debit a day behind its notice. A compliance gate that
+    holds by coincidence is not a compliance gate, and this is the one rule in
+    §12 we can cite a regulator for rather than assert.
     """
     if not is_debit(action):
         return GateVerdict(True, "G9", "G9_NOT_A_DEBIT")
@@ -276,7 +300,10 @@ def gate_g9(case: ObservedCase, state: CaseState, action: Action) -> GateVerdict
         return GateVerdict(True, "G9", "G9_NOT_ENACH")
     if state.notice_window_until is None:
         return GateVerdict(False, "G9", "G9_NO_NOTICE_SERVED")
-    if as_of(case.created_at, state) > state.notice_window_until:
+    now = as_of(case.created_at, state)
+    if now < notice_window_opens_at(state):
+        return GateVerdict(False, "G9", "G9_NOTICE_LEAD_NOT_ELAPSED")
+    if now > state.notice_window_until:
         return GateVerdict(False, "G9", "G9_NOTICE_WINDOW_EXPIRED")
     return GateVerdict(True, "G9", "G9_INSIDE_NOTICE_WINDOW")
 
@@ -367,11 +394,14 @@ def evaluate_gates(
 def after_serve_notice(case: ObservedCase, state: CaseState) -> CaseState:
     """The state transition `serve_notice` performs. SPEC §12 G9.
 
-    Recorded, never inferred (§5.7). The window runs `NOTICE_WINDOW_DAYS` from
-    the moment the notice is served; retries inside it inherit the notice, and
-    retries outside need a fresh one.
+    Recorded, never inferred (§5.7). The window opens `NOTICE_LEAD_HOURS` after
+    the notice is served — RBI requires at least 24 hours of pre-transaction
+    notice — and then runs `NOTICE_WINDOW_DAYS` from that point (A97). Retries
+    inside it inherit the notice; retries before it are too early and retries
+    after it need a fresh one.
     """
     served_at = as_of(case.created_at, state)
+    opens_at = served_at + timedelta(hours=NOTICE_LEAD_HOURS)
     return state.model_copy(
-        update={"notice_window_until": served_at + timedelta(days=NOTICE_WINDOW_DAYS)}
+        update={"notice_window_until": opens_at + timedelta(days=NOTICE_WINDOW_DAYS)}
     )

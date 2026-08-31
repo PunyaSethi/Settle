@@ -29,8 +29,11 @@ from settle.policy.gates import (
     GATES,
     IST,
     MIN_CONTACT_GAP_HOURS,
+    NOTICE_LEAD_HOURS,
+    NOTICE_WINDOW_DAYS,
     evaluation_hour,
     after_serve_notice,
+    notice_window_opens_at,
     evaluate_gates,
     gate_g1,
     gate_g2,
@@ -68,7 +71,7 @@ from settle.schema.enums import (
     Rail,
 )
 from settle.schema.observed import ObservedCase
-from settle.schema.state import CaseState
+from settle.schema.state import CaseState, as_of
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -373,19 +376,51 @@ def test_GAT_9_g9_blocks_an_enach_debit_with_no_notice_and_permits_other_rails()
     assert gate_g9(case(), state(), MESSAGE).reason_code == "G9_NOT_A_DEBIT"
 
 
-def test_GAT_13_serve_notice_opens_the_window_and_the_window_expires():
+def test_GAT_9_g9_blocks_a_debit_inside_the_24_hour_lead():
+    """A97. RBI/DPSS/2026-27/396 requires the pre-transaction notification "at
+    least 24 hours prior to the actual charge / debit", so serving a notice does
+    not open the window — it starts the clock on it.
+
+    Before CP11.1 this passed only because the runner's 24-hour decision cadence
+    never offered a same-tick debit. A compliance rule that holds because of an
+    unrelated constant is not enforced, it is lucky.
+    """
+    enach = case(rail=Rail.ENACH)
+    served = after_serve_notice(enach, state())
+
+    for tick in (0, 1, NOTICE_LEAD_HOURS - 1):
+        verdict = gate_g9(enach, served.model_copy(update={"tick": tick}), RETRY_ENACH)
+        assert verdict.allowed is False, f"a debit {tick}h after notice must be too early"
+        assert verdict.reason_code == "G9_NOTICE_LEAD_NOT_ELAPSED"
+
+    on_the_hour = served.model_copy(update={"tick": NOTICE_LEAD_HOURS})
+    assert gate_g9(enach, on_the_hour, RETRY_ENACH).allowed is True, "'at least 24h' includes 24h"
+
+
+def test_GAT_13_serve_notice_opens_the_window_a_day_later_and_it_expires():
     enach = case(rail=Rail.ENACH)
     before = state()
     assert before.notice_window_until is None
 
     after = after_serve_notice(enach, before)
     assert after.notice_window_until is not None
+    # The window opens after the lead and runs NOTICE_WINDOW_DAYS from there,
+    # so its end is lead + window, not window (A97).
+    assert notice_window_opens_at(after) == as_of(enach.created_at, before) + timedelta(
+        hours=NOTICE_LEAD_HOURS
+    )
+    assert after.notice_window_until == notice_window_opens_at(after) + timedelta(
+        days=NOTICE_WINDOW_DAYS
+    )
 
-    inside = after.model_copy(update={"tick": 48})
+    inside = after.model_copy(update={"tick": NOTICE_LEAD_HOURS + 24})
     assert gate_g9(enach, inside, RETRY_ENACH).allowed is True
     assert gate_g9(enach, inside, RETRY_ENACH).reason_code == "G9_INSIDE_NOTICE_WINDOW"
 
-    outside = after.model_copy(update={"tick": 24 * 4})
+    last = after.model_copy(update={"tick": NOTICE_LEAD_HOURS + 24 * NOTICE_WINDOW_DAYS})
+    assert gate_g9(enach, last, RETRY_ENACH).allowed is True, "the last hour is still inside"
+
+    outside = after.model_copy(update={"tick": NOTICE_LEAD_HOURS + 24 * NOTICE_WINDOW_DAYS + 1})
     verdict = gate_g9(enach, outside, RETRY_ENACH)
     assert verdict.allowed is False
     assert verdict.reason_code == "G9_NOTICE_WINDOW_EXPIRED"
@@ -395,8 +430,14 @@ def test_GAT_13_a_notice_served_later_covers_a_later_debit():
     """The window runs from when the notice was served, not from case creation."""
     enach = case(rail=Rail.ENACH)
     late = after_serve_notice(enach, state(tick=200))
-    assert gate_g9(enach, late.model_copy(update={"tick": 224}), RETRY_ENACH).allowed is True
-    assert gate_g9(enach, late.model_copy(update={"tick": 300}), RETRY_ENACH).allowed is False
+    # Served at 200, so the lead runs to 224 and the window to 224 + 72 = 296.
+    def at(tick):
+        return gate_g9(enach, late.model_copy(update={"tick": tick}), RETRY_ENACH)
+
+    assert at(210).reason_code == "G9_NOTICE_LEAD_NOT_ELAPSED"
+    assert at(224).allowed is True
+    assert at(290).allowed is True
+    assert at(300).reason_code == "G9_NOTICE_WINDOW_EXPIRED"
 
 
 # --------------------------------------------------------------------------

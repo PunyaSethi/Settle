@@ -838,10 +838,24 @@ degrading silently. Every run prints calls, cache hits, tokens, estimated cost.
 | G8 | Dispute freeze |
 | S7 | Economic stop. Lives in `settle/agent/policy.py`, not in `stops.py`: it compares expected recovery against cost, which needs an EV, which needs the estimator. A pure stop cannot ask that question. |
 
-| G9 | e-mandate pre-debit notice. A served notice covers a notified debit window of 3 days from the notified date. Retries inside the window inherit the notice. Retries outside require fresh notice, which costs 24h lead time. G9 sequences the plan, it is not a checkbox. Window length ASSERTED, source in D4. A served notice is a full contact: subject to G1's window, counted against G2's frequency cap, and consuming patience_budget. ASSERTED. Consequence: outside an active window a compliant enach retry costs two of three weekly contacts. The alternative treatment (notice as regulatory overhead, exempt from G2) is recorded in Known Limitations. |
+| G9 | e-mandate pre-debit notice. A served notice opens the debit window `notice_lead_hours` (24) after service and the window then runs `notice_window_days` (3) from that point (A97). Three ways to fail, not two: no notice, too early — inside the lead — or expired. Retries inside the window inherit the notice; retries outside require fresh notice. G9 sequences the plan, it is not a checkbox. **The 24-hour lead is SOURCED**: RBI/DPSS/2026-27/396 (21 Apr 2026) requires the pre-transaction notification "at least 24 hours prior to the actual charge / debit", as did RBI/2019-20/47 before it. It is the only rule in this table with a regulator behind it rather than an assertion. The 3-day window length remains ASSERTED — the framework fixes how long *before* a debit the customer must be told, not how long a notification stays good afterwards. Until CP11.1 the gate enforced only the window and the runner's 24-hour decision cadence supplied the lead by coincidence; a compliance gate that holds because of an unrelated constant is not enforced, it is lucky. A served notice is a full contact: subject to G1's window, counted against G2's frequency cap, and consuming patience_budget. ASSERTED. Consequence: outside an active window a compliant enach retry costs two of three weekly contacts. The alternative treatment (notice as regulatory overhead, exempt from G2) is recorded in Known Limitations. |
 
 | G10 | Class retry budget. Per-class cap on retries, distinct from G4's card-network cap. `ambiguous` = 1: §9 permits one retry at a different hour, then a message. Without this, `ambiguous` retries are unbounded until G4 or S3 fires. |
 | G11 | TRAI DND registry. Blocks `voice_call` when `dnd_flag` is set. Does not block SMS or WhatsApp: DND covers unsolicited commercial contact, and a transactional message to an existing customer about a failed payment is exempt. That exemption is ASSERTED and recorded in Known Limitations. |
+
+**G1 and the TRAI time band — unverified, recorded rather than guessed (A98).**
+G1 opens contact at 08:00 IST. Reporting on the 2025 TCCCPR amendments describes
+a prohibited window of 21:00-09:00, which would make our start an hour too
+early. The clause could not be extracted from TRAI's consolidated PDF, so this
+is flagged rather than corrected. If it holds, INV-2's window is one hour too
+wide at the start and two hours narrower than required at the end. Recorded in
+Known Limitations.
+
+The window is deliberately **not** changed. Guessing at a regulation is worse
+than documenting that we could not verify it: a window moved to 09:00 on the
+strength of a press summary would be a compliance claim resting on the same
+quality of evidence this project criticises elsewhere, and it would silently
+change every arm's contact opportunities in the process.
 
 Every gate has exactly one named test. Blocks are logged with a reason code and
 counted; `gate_blocks > 0` is a required condition for a valid run.
@@ -1057,7 +1071,185 @@ like a parameter — it is whether changing it would move a number in §14.4.
 **Nothing from any employer.** No code, no data, no figures learned on the job,
 not paraphrased. Every prior is public or asserted.
 
-## 16. Razorpay integration
+### 15.1 The sourcing pass — CP11, carried forward at CP11.1
+
+**188 rows: 1 SOURCED, 3 DERIVED, 184 ASSERTED.** The CP11 pass itself scored
+187 rows at 0 SOURCED, 2 DERIVED, 185 ASSERTED; CP11.1 added the one SOURCED row
+and moved one more into DERIVED, both as direct consequences of what the pass
+found. The full citation list, with what each source establishes and what it
+deliberately does not support, is in PRIORS.md under "Provenance".
+
+That result is the honest one and the README says so in those words. It is not
+for want of looking. The searches found real primary material — the RBI
+e-mandate framework, Razorpay's own settlement and retry documentation, TRAI's
+TCCCPR — and almost none of it is a number about this population. **Indian
+payments data is published as system-wide aggregate**: UPI volumes,
+business-versus-technical decline splits, NACH return counts, mandate creation
+totals. **This model concerns the conditional behaviour of a customer whose
+recurring debit has already failed** — how often asking them to re-authorise
+works, how often a message becomes a payment, what a contact costs in opt-out
+risk. **Nobody publishes that.** The regulators publish the opposite kind of
+number, and no amount of further searching changes that.
+
+**The boundary was applied strictly, and near-miss rows were left ASSERTED
+deliberately.** Several were one plausible sentence from a citation and did not
+get one: `class_retry_cap.transient = 3` matches Razorpay's three automatic
+reattempts, but that cadence is class-blind, so the match is a coincidence of
+one class rather than a derivation. `card_network_retry_cap = 4` sits inside the
+published network reattempt caps but is not computed from them, so it is bounded
+by a source rather than sourced. `decline_class_mix.time_shiftable = 0.46` has
+the right *direction* — NPCI-attributed reporting says insufficient balance
+dominates recurring-debit failure — and no public number behind the magnitude.
+Each of those carries its near-miss in its own source cell. A citation stretched
+to cover a number it does not support invites a reader to check it, and being
+caught overselling one source discredits every other row in the file.
+
+| tier | rows | which |
+|---|---|---|
+| SOURCED | 1 | `notice_lead_hours = 24` — RBI/DPSS/2026-27/396: pre-transaction notification "at least 24 hours prior to the actual charge / debit" |
+| DERIVED | 3 | `attempt_number.max = 4` (original charge + Razorpay's three reattempts); `settlement_lag_h_max = 96` (T+2 working days spanning a weekend); `settlement_lag_h.mean = 56` (between the 48h floor and the 96h maximum of the same documented cycle) |
+| ASSERTED | 184 | everything else, each saying so in its own row |
+
+**What the pass found, and what CP11.1 did about it.**
+
+1. **`settlement_lag_h.mean = 38` contradicted our own cited settlement cycle.**
+   T+2 working days is 48h at its shortest, so 92% of our settlements were
+   landing faster than the vendor documentation says is possible. **Fixed at
+   CP11.1 (A96): 38 -> 56**, and the row reclassified DERIVED. The realised mean
+   moves 38.05 -> 56.07 and the share landing at or beyond the documented 48h
+   floor moves 8.0% -> 86.6%. It changed almost nothing downstream, which is
+   itself the finding: see §15.3.
+2. **G9 enforced the notice *window* but not the RBI's 24-hour *lead*.** A debit
+   was permitted the instant a notice was served. **Fixed at CP11.1 (A97)**, and
+   the lead is now the project's only SOURCED constant.
+3. **G1 opens contact at 08:00 IST, and the TRAI band may start at 09:00.**
+   **Deliberately not fixed** — see §12. The clause could not be extracted from
+   the primary text, and guessing at a regulation is worse than documenting that
+   we could not verify it.
+
+### 15.2 The sensitivity sweep — CP11
+
+`settle/eval/sensitivity.py`, 2,000 cases, seed 42, results in
+`out/sensitivity.json`. Fourteen members — every row PRIORS marks REQUIRED, plus
+`p_opt_out.*`, `ltv_months` and `action_lift.*` — each at 0.25x, 0.5x, 1x, 2x and
+4x of its shipped value, clamped to the range the consumer can legally take. Two
+conclusions are checked at every point:
+
+    headline   OURS incremental rate  >  B2 incremental rate
+    restraint  OURS contacts per case <  B2 contacts per case
+
+At 1x: OURS 27.90% against B2's 25.65%, 0.0045 contacts per case against 1.426,
+₹0.09 per ₹100 recovered against ₹0.27.
+
+**The estimator is not retrained at any point.** The shipped model was fitted on
+EXPLORE logs drawn from the world at 1x, so every off-1x row is a policy running
+a model that is now wrong about the world. That is the question a merchant
+actually faces — a prior is an estimate and the policy has to survive being
+wrong about it — but it is not "what OURS would score if refitted here", and the
+two must not be read as the same number.
+
+**Survival ranges.** Both conclusions hold across the full 0.25x–4x span, a
+16-fold swing, for eleven of the fourteen members. Three lose the headline at
+4x and only at 4x:
+
+| member | headline | restraint |
+|---|---|---|
+| `mandate_update.success_rate.*` | 0.25x–2x | 0.25x–4x |
+| `contact_response.rate.*` | 0.25x–2x | 0.25x–4x |
+| `contact_response.behaviour_multiplier.*` | 0.25x–2x | 0.25x–4x |
+| every other member | 0.25x–4x | 0.25x–4x |
+
+The restraint conclusion never flips anywhere in the sweep.
+
+**How the three flips happen, which matters more than that they happen.** OURS
+does not get worse. It is flat at 27.90% across all five multiples of all three.
+B2 climbs into it: at 4x `contact_response.rate.*` B2 reaches 28.00% and passes
+us; at 4x `mandate_update.success_rate.*` it reaches 27.90% and ties.
+`contact_response.rate.*` and `contact_response.behaviour_multiplier.*` produce
+identical numbers because §6.1 multiplies them, so they are one exposure
+reported twice, not two.
+
+**Why OURS is flat, and what it costs us — the exposure, recorded verbatim
+(A99).** These are the words the finding is recorded in, and the README carries
+them:
+
+> The 2.25-point margin is not a claim that our contacts outperform B2's. It is
+> a claim that contacting is not worth doing. Seven of fourteen swept parameters
+> leave OURS's incremental rate completely unmoved, because a policy that does
+> not contact cannot be affected by any prior describing what happens when you
+> do. Every contact-side parameter in the sweep moves B2 and only B2.
+>
+> The headline flips at 4x on `contact_response.rate.*`, an ASSERTED number set
+> conservatively by our own admission, and it flips in the direction a sceptical
+> reader would guess: if contacting customers works better than we assumed, the
+> fixed dunning ladder beats us.
+>
+> Restraint here is a claim about CONTACTS, not activity. OURS dispatches 6,993
+> actions against B2's 6,576. It is more active and less intrusive. The README
+> must say "far fewer contacts" and must not permit the reading "far less work".
+
+**The zero-contact behaviour is a priced decision, not an incapacity.** Halving
+`p_opt_out.*` or `ltv_months` — equivalent, since §20 multiplies them — takes
+OURS from 0.0045 to 0.011 contacts per case, and quartering either takes it to
+0.028. Doubling either takes it to zero. S7 behaves the same way: at 0.25x
+`economic_stop_multiple` OURS contacts 0.021 per case and recovers 28.00%, and
+at 4x it contacts nothing and recovers 27.55%. The policy is trading 0.45 points
+of recovery for the last of its contacts, and that trade is visible and
+reversible rather than hard-wired.
+
+**The parameter named REQUIRED since CP2.3 turns out not to matter.**
+`world.liquidity_window_days` moves OURS from 27.65% to 28.25% across a 16-fold
+swing — 0.6 points. That is the same conclusion A83 reached from the estimator
+side when it withdrew the retry-timing claim, reached independently from the
+world side. Both conclusions survive the whole range.
+
+**`MAX_FLAT_DECISION_RATE` is inert, and the reason is worth stating.** Nothing
+moves at any multiple, because the uncalibrated GBM wins uplift ECE outright
+(0.0176 against GBM+isotonic's 0.0193) and is therefore selected at every floor
+from 0.0125 to 0.20. A92's resolution floor is not currently load-bearing: it
+would decide the outcome only if the flat candidate also won on calibration of
+the uplift. At CP10 it did not. The floor is a guard against a failure that has
+not recurred, not a tuning knob, and the sweep says so.
+
+### 15.3 What the CP11.1 corrections moved — measured, not assumed
+
+Both fixes came out of §15.1's findings, and both were measured before and after
+at 2,000 cases on seed 42, one at a time.
+
+**A96, the settlement lag, moved almost nothing.** SF-1 is unchanged for every
+arm (23 for OURS, 23 for B2). SF-7 moves by one case, on B2 only (8 -> 9). B0's
+recovery, both arms' incremental rates, contacts and cost per ₹100 are all
+bit-identical. The hypothesis was that a longer settlement tail leaves more
+authorisations unsettled at any moment and widens the window those classes are
+detected in. It does not, for two reasons worth recording: **SF-1 is a fact
+about whether money settles at all, not about when** — it is driven by
+`will_settle` and `auth_no_settle_rate`, neither of which moved — and the
+reconciler runs at a 60-day observation horizon that absorbs an 18-hour shift
+without noticing. The parameter is live, not dead: the realised mean moves
+38.05 -> 56.07 and the share landing beyond the documented 48h floor moves
+8.0% -> 86.6%. It was simply wrong in a direction nothing downstream was
+sensitive to. A wrong number that changes no result is still worth fixing, and
+worth reporting as having changed no result.
+
+**A97, the 24-hour lead, moved no arm's numbers at all.** Recovery, incremental
+rate, contacts, dispatches, spend and every silent-failure class are identical
+for OURS, B2 and B0. The only movement is in gate accounting: B2's G9 blocks
+fall 4,052 -> 4,002, because the window now sits 24 hours later and the 72-96h
+band that used to be expired is now inside it.
+
+**The new branch never fires.** `G9_NOTICE_LEAD_NOT_ELAPSED` is returned zero
+times across a 2,000-case run of B1 and of B2; every G9 block is still an
+expiry. That is structural rather than lucky twice over:
+`decision_cadence_hours` and `notice_lead_hours` are both 24, so no arm on the
+runner's cadence can offer a debit inside the lead, and OURS consults gates
+before choosing so it never proposes one. §7 says a detector that always reports
+zero is indistinguishable from a broken one — GAT-9 is what makes this one
+distinguishable, and it asserts the block at 0h, 1h and 23h and the permission
+at exactly 24h. **The point of A97 is not that it changed a number. It is that
+the rule now holds because it is enforced rather than because two unrelated
+constants happen to be equal**, and it will keep holding if either of them moves.
+
+## 16. Razorpay integration## 16. Razorpay integration
 
 Real at the edges, simulated at scale.
 
@@ -1414,3 +1606,11 @@ Resolved:
 - 2026-08-30 — A91: §10.1 — A84's uplift-calibration rule is implemented in `train.py` and both criteria are printed; model artifacts become `out/model_<sha>.pkl` with an `out/model.latest` pointer. Resolves OQ-53.
 - 2026-08-30 — A92: §10.1 — the calibrator is part of the model and enters selection as its own candidate; selection is `min(uplift ECE)` subject to a resolution floor, because uplift ECE is blind to a scorer that has stopped discriminating. Isotonic is rejected on resolution and the cost to the reported ECE is stated. Test EST-13. Resolves OQ-54.
 - 2026-08-30 — A93: §10.1 — `days_since_last_attempt` is computed at the dispatch moment rather than the decision tick, so it varies across the offsets it is asked to separate; `hours_to_contact_window` added for the same reason. 46 features.
+- 2026-08-31 — A94: §15.1 added — the sourcing pass, its tier counts (0 SOURCED, 2 DERIVED, 185 ASSERTED), the citation list in PRIORS.md, and three findings recorded rather than fixed: `settlement_lag_h.mean` contradicts the settlement cycle we cite, G9 enforces the notice window but not the RBI 24-hour lead, and G1 opens an hour before the TRAI band appears to permit.
+- 2026-08-31 — A95: §15.2 added — the sensitivity sweep. `settle/eval/sensitivity.py`, fourteen members at 0.25x–4x, results in `out/sensitivity.json`. Both conclusions survive the full range for eleven members; three lose the headline at 4x, all by B2 climbing rather than OURS falling. Seven members leave OURS unmoved because it makes 9 contacts in 2,000 cases. Tests SEN-1, SEN-2, REB-1.
+- 2026-08-31 — F6: `tests/test_ledger.py` — EXE-1's world-reader list gains `settle/eval/sensitivity.py` as a third named exception, with the reason recorded in the list itself. It rebinds `world.ACTION_LIFT` after patching PARAMS and never dispatches; reaching the module through `sys.modules` would have passed the test by evading it.
+- 2026-08-31 — A96: `settlement_lag_h.mean` 38 -> 56, and the row reclassified DERIVED against Razorpay's documented T+2 working-day cycle (48h floor, 96h weekend-spanning maximum). Found by the CP11 sourcing pass: the old value contradicted the very source it would have cited. §15.3 records what it moved, which is one SF-7 case.
+- 2026-08-31 — A97: §12 G9 — a served notice opens the debit window `notice_lead_hours` (24) AFTER service, not at the moment of service, and the window then runs `notice_window_days` from that point. `notice_lead_hours` enters POLICY_PARAMS as the project's first SOURCED prior, citing RBI/DPSS/2026-27/396. New reason code `G9_NOTICE_LEAD_NOT_ELAPSED`. Tests GAT-9, GAT-13. §15.3 records that it moved no arm's numbers, which is the intended result.
+- 2026-08-31 — A98: §12 — the G1 / TRAI time-band ambiguity recorded rather than guessed. The window is deliberately unchanged. Known Limitations.
+- 2026-08-31 — A99: §15.2 — the exposure finding recorded verbatim: the margin is a claim that contacting is not worth doing, and restraint is a claim about contacts rather than about activity.
+- 2026-08-31 — A100: §15.1 — the sourcing outcome recorded plainly, with the structural reason Indian payments data cannot supply these numbers and the statement that near-miss rows were left ASSERTED deliberately. Counts move to 188 rows: 1 SOURCED, 3 DERIVED, 184 ASSERTED.

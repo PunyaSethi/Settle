@@ -1,0 +1,56 @@
+# CP11 — sourcing and sensitivity. No changes to the model.
+#
+# Part A attached a public citation to every PARAMS and POLICY_PARAMS row that
+# could carry one. Result: 0 SOURCED, 2 DERIVED, 185 ASSERTED, recorded in
+# PRIORS.md under "Provenance" and summarised in SPEC §15.1. Three findings from
+# the pass are recorded rather than fixed, because the world model is frozen for
+# this checkpoint.
+#
+# Part B swept fourteen members at 0.25x-4x against OURS and B2 at 2,000 cases.
+# Both conclusions survive the full 16x range for eleven of them; three lose the
+# headline at 4x, and every one of those flips is B2 climbing rather than OURS
+# falling. SPEC §15.2, out/sensitivity.json.
+
+PRIORS.md
+SPEC.md
+settle/eval/sensitivity.py
+tests/test_sensitivity.py
+out/sensitivity.json
+checkpoints/cp11.allowlist
+
+# --- BLOCKED: one file outside this allowlist has to change ----------------
+#
+# `tests/test_ledger.py::test_EXE_1` asserts that `settle/execute/executor.py`
+# and `settle/recon/reconcile.py` are the only modules under `settle/` that
+# import `settle.sim.world`. `settle/eval/sensitivity.py` now does too, in
+# `_rebind`, and it has to: `world.ACTION_LIFT` is built from PARAMS once at
+# import, so a sweep that patched PARAMS and left it alone would report that
+# `action_lift.*` — a REQUIRED member, upstream of every rupee in §14.4 — has no
+# effect on anything. That is the most dangerous wrong answer this sweep can
+# give, because a flat row is indistinguishable from a robust one.
+#
+# The suite is 656 passed, 1 failed, and the one failure is this and nothing
+# else. It was left failing rather than fixed, because fixing it means editing a
+# file this checkpoint may not touch, and the alternatives are worse:
+#
+#   * reaching the module through `sys.modules` or `importlib` would pass the
+#     test by evading it. An unstated exception is how an invariant dies.
+#   * restructuring the sweep to patch PARAMS in a fresh process before
+#     `settle.sim.world` is first imported would work and needs no exception,
+#     but it forces one process spawn per sweep point and makes the serial path
+#     — the one the tests use — unable to sweep `action_lift.*` at all.
+#
+# The fix, if it is wanted, is one line and its comment:
+#
+#   -WORLD_READERS = {"settle/execute/executor.py", "settle/recon/reconcile.py"}
+#   +# `settle/eval/sensitivity.py` rebinds `world.ACTION_LIFT` after patching
+#   +# PARAMS. It reads the world's constants; it never dispatches.
+#   +WORLD_READERS = {
+#   +    "settle/execute/executor.py",
+#   +    "settle/recon/reconcile.py",
+#   +    "settle/eval/sensitivity.py",
+#   +}
+#
+# That is the same kind of named exception `settle/recon/reconcile.py` already
+# holds, for the same kind of reason: it reads the world rather than acting on
+# it. Punya's call, not CC's.

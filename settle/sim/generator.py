@@ -136,7 +136,12 @@ PARAMS: Final[dict[str, float]] = {
     "payday.seventh_rate": 0.18,
     # --- settlement and reversal (§5.2, §6) ---
     "will_settle_rate": 0.962,
-    "settlement_lag_h.mean": 38.0,
+    # A96. Was 38.0, which was faster than the settlement cycle this project
+    # would cite for it: Razorpay settles T+2 *working* days from capture, so
+    # 48h is the floor and 96h the weekend-spanning maximum. 56 sits between
+    # them. Found by the CP11 sourcing pass, which is the pass working — a
+    # number is not merely unsourced when it contradicts its own nearest source.
+    "settlement_lag_h.mean": 56.0,
     "settlement_lag_h_max": 96.0,
     "will_reverse_rate": 0.011,
     "reversal_delay_days_max": 21.0,

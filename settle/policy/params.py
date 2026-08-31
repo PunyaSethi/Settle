@@ -26,6 +26,19 @@ POLICY_PARAMS: Final[dict[str, float]] = {
     "frequency_window_hours": 168,
     "min_contact_gap_hours": 20,
     # G9 — SPEC §12, the notified debit window.
+    #
+    # The lead is the one number in this file with a regulator behind it. RBI's
+    # e-mandate framework requires the pre-transaction notification "at least 24
+    # hours prior to the actual charge / debit", so a served notice opens the
+    # debit window 24 hours later, not at the moment of service (A97). Until
+    # CP11.1 the gate enforced only the window, and the runner's 24-hour
+    # decision cadence supplied the lead by coincidence — a compliance gate that
+    # holds by accident is not a compliance gate.
+    #
+    # The window length is a different number and still ASSERTED: the framework
+    # fixes how long *before* a debit the customer must be told, not how long a
+    # notification stays good for debits after it.
+    "notice_lead_hours": 24,
     "notice_window_days": 3,
     # The runner's cadence when it has chosen to do nothing and no timer is
     # pending. It sets how many decisions an arm gets across the horizon, and

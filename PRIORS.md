@@ -17,6 +17,94 @@ checks the **Sampled parameters** table against `settle.sim.generator.PARAMS` in
 both directions: a sampled parameter with no row fails the build, and so does a
 row with no parameter.
 
+## Provenance — the CP11 sourcing pass
+
+Three tiers, and the boundary is strict:
+
+- **SOURCED** — a public figure supports this value directly.
+- **DERIVED** — computed from a sourced figure, with the derivation stated in the row.
+- **ASSERTED** — no public source found. The row says so.
+
+Counted 2026-08-31 over all 188 rows in this file, after CP11.1:
+
+| tier | rows |
+|---|---|
+| SOURCED | 1 |
+| DERIVED | 3 |
+| ASSERTED | 184 |
+
+The CP11 pass itself scored 187 rows at 0 / 2 / 185. CP11.1 added
+`notice_lead_hours` as the one SOURCED row (A97, and it is now enforced by G9
+rather than supplied by coincidence) and moved `settlement_lag_h.mean` into
+DERIVED by correcting it to a value the cited cycle actually admits (A96). Both
+changes are consequences of what the pass found, not of further searching.
+
+That is the honest outcome, and the README says so in those words. It is not
+for want of looking. The sources below are real, primary and citable — RBI
+circulars, Razorpay's own product documentation, TRAI's regulations — and
+almost none of them is *a number about this population*. Indian payments data
+is published as system-wide aggregate: UPI volumes, business-versus-technical
+decline splits, NACH return counts, mandate creation totals. This model is
+about the conditional behaviour of a customer whose recurring debit has already
+failed — how often asking them to re-authorise works, how often a message turns
+into a payment, what a contact costs in opt-out risk. Nobody publishes that,
+and the regulators publish the opposite kind of number.
+
+Where a source described the right regime but not the right value, the row was
+left ASSERTED and the source recorded as context in the row's own cell. A
+citation stretched to cover a number it does not support invites a reader to
+check it, and being caught overselling one source discredits every other row in
+this file. Three rows survive that test as DERIVED. Exactly one survives it as
+SOURCED, and it is a regulator's minimum rather than a measurement.
+
+### What was consulted
+
+| source | accessed | what it establishes | what it does not support |
+|---|---|---|---|
+| RBI, *Digital Payments — E-mandate Framework, 2026*, RBI/DPSS/2026-27/396, 21 Apr 2026 — https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13374 | 2026-08-31 | **The one source that supports a value directly** (`notice_lead_hours = 24`, A97). The pre-debit rule G9 exists to model: "An issuer shall send a pre-transaction notification to the customer, at least 24 hours prior to the actual charge / debit." AFA-exempt limits of ₹15,000 per transaction, ₹1,00,000 for insurance, mutual-fund and credit-card-bill categories. A mandate may be withdrawn at any time, which is what makes `mandate_state=revoked` a real state rather than a modelling convenience. | `notice_window_days`. It fixes how long *before* a debit the customer must be told, not how long a notification stays good for debits afterwards, so the window length stays ASSERTED while the lead is SOURCED. It sets AFA thresholds, not an amount distribution, so `amount.*` and `escalation.min_amount_paise` stay ASSERTED. |
+| RBI, *Processing of e-mandate on cards for recurring transactions*, RBI/2019-20/47, 21 Aug 2019 — https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=11668&Mode=0 | 2026-08-31 | The original of the same rule, at "at least 24 hours prior to the actual charge / debit to the card", with the AFA cap then at ₹2,000. Establishes that the 24-hour notification has been in force for the whole period any Indian recurring-payment dataset would cover. | Same as above. |
+| Razorpay Docs, *Payment Retries* (Subscriptions) — https://razorpay.com/docs/payments/subscriptions/payment-retries/ | 2026-08-31 | The reference dunning cadence B2 is modelled on: a failed charge is reattempted on T+1, T+2 and T+3, and "if the charge still fails, the Subscription moves to the `halted` state". On emandate, retries occur "only when we get the confirmation or rejection of the last payment, as it may take more than 24 hours". The failure email "contains a link that the customer can use to change the card details" — the real-world `request_mandate_update`. | The retry cadence is class-blind, so no per-class row inherits it: `class_retry_cap.transient = 3` matching the vendor's three reattempts is a coincidence of one class, not a derivation, and stays ASSERTED. It gives no success rate for any of those reattempts, so `action_lift.*`, `mandate_update.success_rate.*` and `contact_response.*` stay ASSERTED. Its offsets are 24/48/72h and `action_grid` has 48 and 72 but not 24, so the grid is not derived from it. |
+| Razorpay Docs, *Settlements* — https://razorpay.com/docs/payments/settlements/ | 2026-08-31 | The settlement cycle INV-1 and §13.1 are built around: "T+2 working days (where T is the date of transaction capture)", "working days do not include the bank holidays", and settlement moving to "the next working day after the bank holiday". Resolves OQ-6's cheap INV-10 win, in one direction only. | It supports a *maximum*, not a mean — see the finding recorded against `settlement_lag_h.mean` below. It says nothing about how often an authorisation fails to settle, so `auth_no_settle_rate` and `will_settle_rate` stay ASSERTED. |
+| TRAI, *Telecom Commercial Communications Customer Preference Regulations, 2018* — https://trai.gov.in/node/3199 | 2026-08-31 | That the DND/preference regime G11 models exists, is a regulation rather than a courtesy, and distinguishes promotional from transactional and service messages — which is the distinction G11's exemption rests on. | The consolidated regulation is published only as a PDF this pass could not extract text from, so no clause is quoted here and nothing is elevated above ASSERTED on its authority. In particular the permitted-hours band was **not** verified against the primary text; see the G1 finding below. |
+| Nets (Nexi Group) support, *Visa fines on attempts to complete already declined transactions*, published 28 Nov 2023, updated 12 May 2026 — https://support.nets.eu/article/visa-fines-on-attempts-to-complete-already-declined-transactions | 2026-08-31 | That a card-network reattempt cap of the kind G4 models is real and enforced with fees: "it is not allowed to reattempt, a transaction that has previously been declined, 15 or more times in a 30-day period." | This is a PSP's restatement with no Visa rule reference or effective date, and 15 is a ceiling rather than a value. `card_network_retry_cap = 4` is bounded by it, not derived from it, and stays ASSERTED. |
+
+### Findings from the sourcing pass
+
+Found at CP11 with the world model frozen, carried into CP11.1 and resolved
+there. What each correction actually moved is measured in SPEC §15.3 rather than
+assumed.
+
+1. **RESOLVED (A96). `settlement_lag_h.mean = 38` contradicted our own cited
+   settlement cycle.** T+2 *working* days from capture is 48 hours at its
+   shortest, so 38h was faster than the vendor documentation we would cite for
+   it — not merely unsourced but inconsistent with its nearest source. Raised to
+   56, between the 48h floor and the 96h maximum, and the row reclassified
+   DERIVED. The realised mean moves 38.05 -> 56.07 and the share landing at or
+   beyond the documented floor moves 8.0% -> 86.6%. Downstream it moved a single
+   SF-7 case on B2 and nothing else, because SF-1 is a fact about *whether* money
+   settles rather than *when*, and the 60-day observation horizon absorbs an
+   18-hour shift.
+
+2. **RESOLVED (A97). G9 enforced the notice *window* but not the 24-hour
+   *lead*.** `after_serve_notice` started the notified window at the moment of
+   service, so a debit was permitted immediately afterwards, while the RBI rule
+   requires at least 24 hours. The runner's 24-hour decision cadence supplied the
+   lead by accident, which is not the same as a gate enforcing it. The window now
+   opens `notice_lead_hours` after service and runs `notice_window_days` from
+   there. It moved no arm's numbers, and `G9_NOTICE_LEAD_NOT_ELAPSED` fires zero
+   times in a real run — both expected, because the cadence and the lead are both
+   24. The rule now holds because it is enforced rather than because two
+   unrelated constants happen to be equal.
+
+3. **OPEN, deliberately (A98). G1's window opens an hour before the TRAI band.**
+   Contact is permitted from 08:00 IST. Reporting on the 2025 TCCCPR amendments
+   describes a prohibition on commercial communication between 21:00 and 09:00.
+   This pass could not extract the clause from TRAI's consolidated PDF, so it is
+   flagged rather than asserted — but if it holds, INV-2's window is one hour too
+   wide at the start and two hours narrower than required at the end. **The
+   window is deliberately not changed.** Guessing at a regulation is worse than
+   documenting that we could not verify it. Recorded in Known Limitations.
+
 ## Generator and world parameters
 
 Source of truth: `settle/sim/generator.py`, the `PARAMS` dict. Read by the
@@ -49,7 +137,7 @@ Read by the generator or world to draw a value.
 | tenure.mean_months | 9 | ASSERTED | 2026-08-27 | pending D4 |
 | tenure.max_months | 60 | ASSERTED | 2026-08-27 | pending D4 |
 | attempt_number.decay | 0.45 | ASSERTED | 2026-08-27 | pending D4 |
-| attempt_number.max | 4 | ASSERTED | 2026-08-27 | pending D4 |
+| attempt_number.max | 4 | DERIVED — Razorpay Subscriptions reattempts a failed charge on T+1, T+2 and T+3 and then halts the subscription; the original charge plus three reattempts is four submissions, which is the largest `attempt_number` a case can present with. https://razorpay.com/docs/payments/subscriptions/payment-retries/ | 2026-08-31 | pending D4 |
 | prior_failures.mean | 0.9 | ASSERTED | 2026-08-27 | pending D4 |
 | prior_failures.max | 8 | ASSERTED | 2026-08-27 | pending D4 |
 | prior_recoveries.mean | 0.6 | ASSERTED | 2026-08-27 | pending D4 |
@@ -97,8 +185,8 @@ Read by the generator or world to draw a value.
 | payday.first_of_month_rate | 0.46 | ASSERTED | 2026-08-27 | pending D4 |
 | payday.seventh_rate | 0.18 | ASSERTED | 2026-08-27 | pending D4 |
 | will_settle_rate | 0.962 | ASSERTED | 2026-08-27 | pending D4 |
-| settlement_lag_h.mean | 38 | ASSERTED | 2026-08-27 | pending D4 |
-| settlement_lag_h_max | 96 | ASSERTED | 2026-08-27 | pending D4 |
+| settlement_lag_h.mean | 56 | DERIVED — Razorpay settles T+2 working days from capture, so 48h is the floor of the documented cycle and 96h (`settlement_lag_h_max`) its weekend-spanning maximum; 56 sits between them. Was 38 until CP11.1 (A96), which is below the floor and therefore contradicted the very source it would have cited. https://razorpay.com/docs/payments/settlements/ | 2026-08-31 | pending D4 |
+| settlement_lag_h_max | 96 | DERIVED — Razorpay settles T+2 working days from capture, excluding bank holidays. A Thursday or Friday capture spans the weekend, so in a week with no public holiday the cycle's maximum is four calendar days = 96h. Public holidays can exceed it; the cap truncates that tail and the truncation is a stated limitation. https://razorpay.com/docs/payments/settlements/ | 2026-08-31 | pending D4 |
 | will_reverse_rate | 0.011 | ASSERTED | 2026-08-27 | pending D4 |
 | reversal_delay_days_max | 21 | ASSERTED | 2026-08-27 | pending D4 |
 | response.base_mean | 0.22 | ASSERTED | 2026-08-27 | pending D4 |
@@ -203,13 +291,14 @@ PAR-1 checks this table against it in both directions.
 
 | parameter | value | source | date | sensitivity |
 |---|---|---|---|---|
-| card_network_retry_cap | 4 | ASSERTED | 2026-08-29 | pending D4 |
+| card_network_retry_cap | 4 | ASSERTED — bounded by, not derived from, the nearest public figure: a PSP's restatement of Visa's cap at 15 reattempts of an already-declined transaction per 30 days, with no Visa rule reference. 4 is strictly inside it. https://support.nets.eu/article/visa-fines-on-attempts-to-complete-already-declined-transactions | 2026-08-31 | pending D4 |
 | attempt_budget | 6 | ASSERTED | 2026-08-29 | pending D4 |
 | contact_budget | 5 | ASSERTED | 2026-08-29 | pending D4 |
 | frequency_cap_per_window | 3 | ASSERTED | 2026-08-29 | pending D4 |
 | frequency_window_hours | 168 | ASSERTED | 2026-08-29 | pending D4 |
 | min_contact_gap_hours | 20 | ASSERTED | 2026-08-29 | pending D4 |
-| notice_window_days | 3 | ASSERTED | 2026-08-29 | pending D4 |
+| notice_lead_hours | 24 | SOURCED — RBI, Digital Payments — E-mandate Framework, 2026, RBI/DPSS/2026-27/396, 21 Apr 2026: "An issuer shall send a pre-transaction notification to the customer, at least 24 hours prior to the actual charge / debit." Same requirement in RBI/2019-20/47 of 21 Aug 2019. https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13374 | 2026-08-31 | G9 blocks a debit inside the lead (A97). Not swept: it is a regulatory minimum, and a sweep of it would be a sweep of how far we are willing to break the rule. |
+| notice_window_days | 3 | ASSERTED — the RBI e-mandate framework fixes a 24-hour pre-debit *lead time*, not how long a served notice stays valid for later debits. The lead is sourced; this window is not. https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13374 | 2026-08-31 | pending D4 |
 | decision_cadence_hours | 24 | ASSERTED | 2026-08-29 | pending D4 |
 | action_cost.do_nothing | 0 | ASSERTED | 2026-08-30 | pending D4 |
 | action_cost.retry | 5 | ASSERTED | 2026-08-30 | pending D4 |
@@ -246,7 +335,7 @@ PAR-1 checks this table against it in both directions.
 | action_grid.offset_one_week | 168 | ASSERTED | 2026-08-29 | pending D4 |
 | action_grid.max_horizon_h | 720 | ASSERTED | 2026-08-29 | pending D4 |
 | class_retry_cap.time_shiftable | 4 | ASSERTED | 2026-08-29 | pending D4 |
-| class_retry_cap.transient | 3 | ASSERTED | 2026-08-29 | pending D4 |
+| class_retry_cap.transient | 3 | ASSERTED — Razorpay's three automatic reattempts are class-blind, so the match with this one class is a coincidence and not a derivation. | 2026-08-31 | pending D4 |
 | class_retry_cap.dead_instrument | 2 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — A86 gives a re-authorised mandate a debit budget, and this caps it, so it bounds how much of the `dead_instrument` slice is recoverable. |
 | class_retry_cap.auth_abandoned | 0 | ASSERTED | 2026-08-29 | pending D4 |
 | class_retry_cap.ambiguous | 1 | ASSERTED | 2026-08-29 | pending D4 |

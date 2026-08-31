@@ -266,7 +266,24 @@ def _imports(path: Path) -> set[str]:
 # reads one pure function from it — `natural_recovery_at`, a self-cure that
 # happened whatever any arm did — which is a different thing from dispatching,
 # and the auditor cannot report B0's recovery without it.
-WORLD_READERS = {"settle/execute/executor.py", "settle/recon/reconcile.py"}
+WORLD_READERS = {
+    # Dispatches. This is the boundary.
+    "settle/execute/executor.py",
+    # Reads one pure function — `natural_recovery_at`, a self-cure that happened
+    # whatever any arm did. Different from dispatching, and the auditor cannot
+    # report B0's recovery without it.
+    "settle/recon/reconcile.py",
+    # F6. Rebinds `world.ACTION_LIFT` after patching PARAMS. `ACTION_LIFT` is
+    # built from PARAMS once at import, so a sweep that patched PARAMS and left
+    # it alone would report that `action_lift.*` — a REQUIRED sweep member,
+    # upstream of every rupee in §14.4 — moves nothing. A flat sweep row is
+    # indistinguishable from a robust result, which makes that the most
+    # dangerous wrong answer the sweep can give. It reads the world's constants
+    # and never dispatches. Reaching the module through `sys.modules` would have
+    # passed this test by evading it, and an unstated exception is how an
+    # invariant dies (SPEC §7 says the same of INV-8's).
+    "settle/eval/sensitivity.py",
+}
 
 
 def test_EXE_1_the_executor_is_the_only_module_that_acts_on_the_world():
