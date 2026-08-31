@@ -1,0 +1,61 @@
+# CP9.1 — contacts must be able to work.
+#
+# A89 gives every contact verb a path to money; A90 closes the train/serve skew;
+# A91 implements A84's selection rule and content-addresses the artifact. Then
+# every number is measured again, three times, so the world change and the model
+# change can be told apart.
+#
+# NOTE ON THE AMENDMENT ID: the checkpoint prompt names the contact mechanism
+# A87. That ID was taken at CP9 by the action-grid move, and A88 by the
+# estimator memo, both already in the amendment log. Re-using A87 would make the
+# log ambiguous in the one document whose value is traceability, so this ships as
+# A89 and the prompt's A87 is recorded here as its origin.
+
+SPEC.md
+PRIORS.md
+settle/sim/world.py
+settle/sim/streams.py
+settle/sim/debtors.py
+settle/execute/executor.py
+settle/runner/case_runner.py
+settle/agent/policy.py
+settle/agent/features.py
+settle/agent/train.py
+settle/agent/estimator.py
+settle/policy/params.py
+tests/test_world.py
+tests/test_estimator.py
+tests/test_policy.py
+checkpoints/cp9_1.allowlist
+
+# --- outside the stated allowlist, and why --------------------------------
+#
+# settle/sim/generator.py — `PARAMS` is the single home for every world number
+# and GEN-4/PAR-1 checks it against PRIORS.md in both directions. A second dict
+# for `contact_response.*` would be a number that moves a §14.4 metric with no
+# row checking it, which is the failure INV-10 exists to prevent.
+settle/sim/generator.py
+#
+# settle/schema/state.py — Part B names `CaseState` explicitly, and Part A's
+# pending response is a recorded state transition (§5.7), not something to be
+# inferred. Three fields added.
+settle/schema/state.py
+#
+# tests/test_streams.py — STR-4 asserts the stream count. 12 -> 14.
+tests/test_streams.py
+#
+# tests/test_ours.py — reads the model artifact, which D2 moves from a bare
+# `out/model.pkl` to a content-addressed path behind `latest_model_path`. One
+# line; leaving it would have meant keeping the bare artifact D2 forbids.
+tests/test_ours.py
+
+# --- carried from CP9, which is not yet committed --------------------------
+# The gate's baseline is HEAD (CP8), so CP9's files still read as changed.
+# Listed so the CP9.1 gate reports on CP9.1's work rather than on the
+# checkpoint before it. Their justifications are in checkpoints/cp9.allowlist.
+settle/policy/grid.py
+settle/policy/legal.py
+settle/diagnose/taxonomy.py
+settle/runner/arms/explore.py
+tests/test_taxonomy.py
+checkpoints/cp9.allowlist

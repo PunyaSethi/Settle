@@ -86,9 +86,14 @@ FORBIDDEN_ACTIONS: Final[dict[DeclineClass, frozenset[ActionType]]] = {
             ActionType.ESCALATE_HUMAN,
         }
     ),
-    DeclineClass.DEAD_INSTRUMENT: frozenset(
-        {ActionType.RETRY, ActionType.SWITCH_RAIL, ActionType.SERVE_NOTICE}
-    ),
+    # A86: `retry` and the `serve_notice` that sequences it are forbidden while
+    # the credential is dead, which is what §9's "any retry" was always about.
+    # A successful `request_mandate_update` replaces the credential, and the ban
+    # does not describe the replacement. The condition is a property of
+    # `mandate_state`, not of the verb, so it lives in `legal_actions` alongside
+    # the other parameter-level conditions this table cannot express — the same
+    # place "same-hour retry" and "retry same rail" live.
+    DeclineClass.DEAD_INSTRUMENT: frozenset({ActionType.SWITCH_RAIL}),
     DeclineClass.AUTH_ABANDONED: frozenset(
         {ActionType.RETRY, ActionType.REQUEST_MANDATE_UPDATE, ActionType.SERVE_NOTICE}
     ),

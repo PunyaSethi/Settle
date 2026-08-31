@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from settle.agent.estimator import Estimator
+from settle.agent.estimator import Estimator, latest_model_path
 from settle.audit.chain import Ledger, read_entries
 from settle.execute.executor import WorldHandle
 from settle.recon.reconcile import failure_counts, reconcile
@@ -27,13 +27,13 @@ from settle.sim.observability import ObservabilityConfig
 from settle.sim.streams import Streams
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MODEL = REPO_ROOT / "out" / "model.pkl"
+MODEL = latest_model_path(REPO_ROOT / "out")
 N, SEED = 400, 42
 CONTACT_VERBS = {
     "send_message", "request_mandate_update", "serve_notice", "voice_call", "escalate_human"
 }
 
-pytestmark = pytest.mark.skipif(not MODEL.exists(), reason="no trained model; run CP7 training")
+pytestmark = pytest.mark.skipif(MODEL is None, reason="no trained model; run CP7 training")
 
 
 @pytest.fixture(scope="module")

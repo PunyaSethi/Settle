@@ -293,6 +293,11 @@ CaseState
   promise_date       date | null
   promise_logged_at  datetime | null
   notice_window_until datetime | null    # G9
+  mandate_update_due_tick int | null     # A86, a pending re-authorisation
+  mandate_revived    bool                # A86, it came back
+  contact_response_due_tick int | null   # A89, a pending customer response
+  contact_response_verb  ActionType|null # A89, which verb is pending
+  last_attempt_tick  int | null          # A90, the tick the last debit fired
   dispatched_keys    frozenset[str]      # G5 idempotency
   settled            bool                # S1; a settlement, never an authorisation
   settled_at         datetime | null
@@ -372,6 +377,77 @@ real-world failure class, not a reporting artefact. It lives in world PARAMS.
 settle, still reverses, still lags. The flag measures what unreliable reporting
 costs, not what a perfect world would pay.
 
+### 6.1 Contact response — A89
+
+Before A89, no contact verb could produce a settlement. `world.attempt()` ran
+for debits only, so a message, a voice call and a human escalation were
+dispatched, priced, gated and logged while being structurally incapable of
+recovering money. Every comparison of contact-heavy against contact-light arms
+made before this point was measuring the absence of a mechanism, not a policy
+difference. A86 fixed one instance of this; A89 fixes the class.
+
+"Same recovery, far fewer contacts" is trivially true when contacts cannot
+recover anything. The claim only means something once they can.
+
+The mechanism mirrors §9.1's, and for the same reason it is not a coin flip at
+dispatch:
+
+- a dispatched contact sets a pending customer response, at a delay drawn from
+  `contact_response.delay_h_max`. The arm has to decide what to do while it
+  waits;
+- when it lands, the customer either pays of their own accord or does not:
+
+      p = contact_response.rate[intent]
+          x action_lift[verb]
+          x contact_response.behaviour_multiplier[behaviour]
+          x p_authorise.dnd_contact_penalty, where it applies
+
+  drawn from the indexed stream `contact_response_draw` at the tick the response
+  is *due*, and therefore shared across arms;
+- conditioned on `intent_type`, because a message to someone who has left is not
+  a message that gets paid, and modulated by §8's debtor behaviour, because
+  `go_silent` is near zero by definition and `pay_then_complain` is the one that
+  reliably pays;
+- `action_lift` is reused rather than duplicated, so a voice call outranks an
+  SMS here for the same declared reason it does for a debit, and `serve_notice`
+  sits at zero because a regulatory notice is not a persuasion.
+
+**A customer-initiated payment is still a payment.** It runs through the same
+`settle()` the debit path uses, so `auth_no_settle_rate`, `settlement_lag_h` and
+`will_reverse` all apply, and it is reported through the same §6 layer — it can
+be dropped into an SF-2 or duplicated into an SF-3. Routing it around either
+would make messaging the one channel where money is certain and reporting is
+perfect, which is the opposite of what this project models. WLD-7 asserts it.
+
+Nothing is submitted to a rail, so G3, G4 and G9 have nothing to say about it.
+That is the only respect in which it differs from a debit.
+
+**Money already in flight survives the decision horizon.** A response pending
+when a stop fires is resolved before stopping: the world runs to 60 days
+(§13.1), and a customer who was going to pay on day 31 still pays. Dropping it
+would understate every contact-bearing arm by exactly the contacts it made near
+the end. The draw is addressed at the due tick, so resolving late is
+bit-identical to resolving on time (WLD-8).
+
+**A pending response is not a wake-up reason.** There is nothing for an arm to
+decide at the moment a customer pays unprompted, and waking for it inserts
+decision points at whatever hour the response lands — mostly hours when G1 shuts
+the contact window. Measured at CP9.1: it cut EXPLORE's coverage of every
+contact verb by about 60% and inflated `do_nothing`. It would also hand
+contact-heavy arms more decisions than contact-light ones for no reason
+connected to policy. A pending *re-authorisation* does wake the runner, because
+a revived mandate opens debit paths an arm should be given the chance to use.
+
+Every parameter here is ASSERTED, carries a PRIORS row, and is a REQUIRED member
+of the D4 sensitivity sweep. `contact_response.rate.*` decides whether
+contacting anyone is viable at all, and therefore whether the contact-restraint
+result is a finding or an artefact.
+
+**WLD-9 is the general guard.** Every verb must route to `attempt()`, to
+`contact_payment()`, or to a declared zero lift with a stated reason. A verb
+that falls through all three is a priced no-op, which is the bug CP9 and CP9.1
+were both spent on.
+
 ## 7. Silent failure taxonomy — DIFFERENTIATOR
 
 `settle/recon/silent_failures.py`. Each class is detected by comparing the
@@ -449,7 +525,7 @@ never invoked on a decline code.
 |---|---|---|---|
 | `time_shiftable` | insufficient_funds | do_nothing, retry, serve_notice | contact, same-hour retry |
 | `transient` | gateway_timeout, issuer_down | do_nothing, retry, serve_notice | contact |
-| `dead_instrument` | card_expired, mandate_revoked, card_stolen | do_nothing, request_mandate_update, send_message | any retry |
+| `dead_instrument` | card_expired, mandate_revoked, card_stolen | do_nothing, request_mandate_update, send_message, and — once the mandate is ACTIVE again — retry and serve_notice | any retry while the mandate is dead |
 | `auth_abandoned` | authentication_failed | do_nothing, send_message, switch_rail | retry same rail |
 | `ambiguous` | do_not_honour | do_nothing, retry, send_message | repeated retry beyond G10's cap |
 | `terminal` | fraud_flagged | do_nothing, escalate_human | everything else |
@@ -480,6 +556,54 @@ above 5% is a gate failure.
 only legal inside an active notice window (G9). Outside it, the agent must
 schedule notice-then-debit, costing 24h. This is a real planning constraint and
 the policy must handle it, not route around it.
+
+### 9.1 Mandate re-authorisation — A86
+
+Before A86, `request_mandate_update` was legal, selected, and structurally
+incapable of succeeding: it is contact-bearing, so `world.attempt()` produced no
+outcome for it, and nothing revived a dead mandate. §9 named it as the recovery
+path for `dead_instrument` while the simulator gave that path a hard zero. 17% of
+the batch was unwinnable by construction, which inflated every arm's apparent
+restraint — a policy that does nothing where nothing can work looks wise rather
+than idle.
+
+The mechanism, and it is deliberately not a coin flip at dispatch:
+
+- a dispatched `request_mandate_update` sets a pending re-authorisation, at a
+  delay drawn from `mandate_update.response_delay_h_max`. The mandate is dead
+  for the whole of that wait, so an arm that asks has to decide what to do in
+  the meantime;
+- when it lands, `mandate_update.success_rate.<intent>` decides whether the
+  mandate becomes ACTIVE, drawn from the indexed stream `mandate_revival_draw`
+  at that tick and therefore shared across arms;
+- the probability is conditioned on `intent_type`. A churned customer does not
+  re-authorise, and a single global rate would make `intent_type` decorative in
+  the place it decides most;
+- once ACTIVE, G3 stops blocking and the debit paths open.
+
+Both parameters are ASSERTED, both carry PRIORS rows, and both are REQUIRED
+members of the D4 sensitivity sweep. `mandate_update.success_rate.*` decides
+whether 17% of the batch is winnable at all, which makes it the highest-leverage
+unsourced number in the model.
+
+**The retry ban is about the credential, not the class.** §9 forbids
+`dead_instrument` any retry because retrying an expired card gets the same
+decline. That is not a statement about the card the customer supplies when they
+act on the request. Stated as a derivation, for the reason A66 derived
+`serve_notice` — a listed exception drifts, a rule does not:
+
+    RETRY is viable for dead_instrument  <=>  mandate_state is ACTIVE
+
+`serve_notice` follows from A66's own rule. The condition reads `ObservedCase`
+only, so LEG-3 still holds exactly: no field of `CaseState` changes what
+`legal_actions` returns, and EXPLORE's propensity denominator does not move with
+a case's contact history. A mandate coming back is a change in the world that
+the merchant observes, not a change in gate state — `mandate_state` is a §5.1
+field and the registry really does flip.
+
+G10's `class_retry_cap.dead_instrument` moves from 0 to 2 to match. At zero it
+was correct while the class could never offer a retry, and would have silently
+blocked the one path the class has.
 
 ## 10. Policy
 
@@ -555,6 +679,74 @@ sensitive to is the difference, not either term alone. LR wins overall
 (ECE 0.0189 vs 0.0225) and loses on `do_nothing` rows (0.0359 vs 0.0307).
 Selection is therefore made on the calibration of the uplift term itself. If the
 two models split, the hybrid ships and is stated explicitly rather than hidden.
+
+**The calibrator is part of the model, and it was erasing the answer** (A92).
+Post-hoc isotonic calibration is monotone, so it can never invert an ordering —
+it can only *tie* candidates, and ties are the damage. It is a step function
+with a few dozen levels, so it cannot express a difference smaller than one
+step. A retry costs 5 paise against a median debit near ₹500 and carries no
+opt-out risk, so S7 clears one at roughly **0.03%** uplift; isotonic's steps are
+around **3 points**, two orders of magnitude coarser than the decision.
+
+Measured at CP10, on real candidate grids from held-out cases:
+
+| | median uplift spread | decisions scored flat | uplift ECE | overall ECE |
+|---|---|---|---|---|
+| GBM + isotonic | 0.0298 | 11.5% | 0.0193 | 0.0160 |
+| GBM, uncalibrated | 0.0708 | 0.0% | 0.0176 | 0.0392 |
+
+Calibration cost 11.5% of decisions their entire resolution and bought **nothing**
+on the criterion the model is selected by. Uplift ECE did not notice, because it
+bins by predicted uplift before comparing against a matched control rate — a
+model returning one number for every candidate is still binned and still scores
+well. **Uplift ECE is blind to the failure that matters most to the policy.**
+
+Selection is therefore `min(uplift ECE)` **subject to a resolution floor**: a
+scorer flat on more than `MAX_FLAT_DECISION_RATE` of multi-option decisions is
+not selectable at any calibration. It is a constant with a confidence interval.
+Resolution is measured on real candidate grids built from held-out test cases —
+never from the generator, which `settle/agent/` may not import (INV-8).
+
+**The cost is stated, not hidden.** The shipped model's probability *level* is
+calibrated to 0.0392 ECE where the rejected candidate reached 0.0160. §14.4
+reports the shipped model's number. We give up calibration of the level to keep
+calibration and resolution of the difference, because §10.2 uses only the
+difference — and the reliability diagram is reported for what actually ships.
+
+A84 said this from CP8 and `train.py` did not do it: it selected on overall ECE,
+and `uplift_calibration` was called by nothing. At CP9 the two criteria
+disagreed — LR won overall, GBM won the difference — so the shipped model was
+chosen by the criterion this section rejects. Wired at CP9.1 (A91): selection is
+`min(ece_uplift)`, both criteria are printed for both models, and a disagreement
+is named in the training output rather than resolved silently by a `min()`.
+
+**Features must vary across the candidates they are asked to separate** (A93).
+Within one decision only the action and its dispatch moment change, so a feature
+computed at the *decision* tick is constant across every candidate and cannot
+contribute to the choice. `days_since_last_attempt` was computed at the decision
+tick and was therefore identical across all eight offsets of a retry — while
+ranking 2nd of 45 by permutation importance. It is now computed at the dispatch
+moment, and `hours_to_contact_window` is added for the same reason: `18h` and
+`30h` are both "tomorrow", and only one of them lands inside G1's window.
+
+Eight of forty-six features now vary across the retry candidates of a single
+decision. The remaining thirty-eight describe the case, which is the same case
+whichever option is taken.
+
+**Feature parity between training and serving.** The row the estimator is asked
+to score must be the row it was trained on. Until CP9.1 `policy.py` omitted
+`last_attempt_tick`, so `days_since_last_attempt` and `has_prior_attempt` were
+reconstructed in training and constant at serve time. `CaseState` carries the
+tick the last debit *fired* — the offset included, because a scheduled retry
+reaches the bank when it is submitted — and EST-12 asserts the two rows are
+byte-identical for the same inputs.
+
+**Artifacts are content-addressed and never overwritten.** `out/model_<sha>.pkl`,
+with `out/model.latest` naming the current one. The CP8-to-CP9 comparison is
+unrecoverable because retraining replaced a bare `model.pkl` in place: the world
+had changed and the model had changed, and with the old artifact gone the two
+could not be told apart. A run that cannot be re-measured against its
+predecessor is a run whose numbers cannot be attributed.
 
 Reported: reliability diagram, ECE, Brier score.
 
@@ -772,12 +964,26 @@ patience_draw     per contact
 out_of_order      per reported outcome
 natural_recovery_draw  per case
 natural_recovery_day   per case
+mandate_revival_draw   per pending re-authorisation
+mandate_response_delay per mandate update dispatched
+contact_response_draw  per pending customer response
+contact_response_delay per contact dispatched
 ```
 
 `out_of_order` and the natural-recovery pair are shared for the same reason as
 the rest. A reporting distortion drawn from a private address would differ
 between arms facing the same case, and a self-cure that differed between arms
 would make §14.3's subtraction compare two different events.
+
+The mandate pair (A86) and the contact pair (A89) are shared for the same
+reason: whether a customer re-authorises, or goes and pays after being
+messaged, is a fact about the customer, so two arms that act at the same tick
+must get the same answer. Without that, "the arm that contacts more recovers
+more" would be partly a statement about which arm drew the luckier numbers. They are two addresses rather than one because
+the success is drawn at the tick the re-authorisation lands and the delay at the
+tick it was requested — one stream would make a second request's delay the same
+number that decided the first request's success whenever they coincide, and a
+coupling nobody declared is exactly what this section exists to remove.
 
 ### 14.3 Incremental scoring
 
@@ -895,6 +1101,7 @@ settle/
                    verb set of §5.3 before gates
   policy/
     gates.py
+    grid.py        the action grid, shared by OURS and EXPLORE (A87)
     stops.py
   execute/
     executor.py
@@ -1015,6 +1222,46 @@ Resolved inside the checkpoint that reaches them, not by further spec amendment.
 
 Resolved:
 
+- OQ-54 — the estimator returned identical probabilities for a large share of
+  multi-option decisions, so OURS declined retries costing 5 paise at zero
+  opt-out risk and lost to B2 on incremental recovery. Diagnosed at CP10 in four
+  parts: the probabilities were bit-identical rather than rounded together; the
+  isotonic calibrator was the cause; the uplift was *not* swamped by noise
+  (signal-to-noise 2.95 on the paired difference); and eight features do vary
+  across retry candidates, so the model was not structurally unable to
+  discriminate. Resolved by A92, with A93 fixing a feature that should have
+  varied and did not. A direct two-model uplift learner was tested and was worse
+  on every measure — recorded below rather than dropped.
+
+- OQ-51 — no contact verb could produce a settlement. `world.attempt()` ran for
+  debits only, so `action_lift.send_message`, `.voice_call` and
+  `.escalate_human` carried PRIORS rows while sitting in a branch only debits
+  reached, and `p_authorise.dnd_contact_penalty` with them. The project's
+  primary claim — same recovery, far fewer contacts — was trivially true because
+  contacts were structurally incapable of recovering anything. Resolved at CP9.1
+  by A89, and guarded generally by WLD-9: every verb routes to `attempt()`, to
+  `contact_payment()`, or to a declared zero lift with a stated reason.
+- OQ-52 — `policy.py` never passed `last_attempt_tick`, so two features were
+  reconstructed in training and constant in use. Resolved by A90. EST-12.
+- OQ-53 — A84's selection rule had no code path and the shipped model was chosen
+  by the criterion A84 rejects. Resolved by A91. Model artifacts are
+  content-addressed in the same amendment, so the next world change can be
+  separated from the next model change.
+- OQ-50 — `settle/agent/policy.py` imported the action grid from
+  `settle/runner/arms/explore.py`. The agent is the thing being evaluated and
+  the runner is the harness that evaluates it, so the dependency ran backwards
+  and the policy could not be used without the experiment that measured it —
+  the same error class as CP3.1's escalation rule. Resolved by A87: the grid
+  lives in `settle/policy/grid.py`, both consumers import it from there, and
+  POL-8 walks the AST of every module under `settle/agent/` to assert none of
+  them imports `settle.runner`.
+- OQ-49 — a 10,000-case OURS run took 25 minutes, which is unusable for the D4
+  sweep and impossible in a demo. Resolved by A88 down to 3.2 minutes, and the
+  residue is reported rather than hidden: `predict_proba` costs ~3.5ms whether
+  it is handed one row or fifteen, because the time goes on walking 200 boosting
+  iterations, so the fix was fewer calls rather than fewer rows. The memo and
+  horizon warming take a 100-case run from 2,889 predict calls to 134. POL-9
+  asserts the probabilities are bit-identical to an unwarmed estimator.
 - OQ-34 — `out_of_order` drew from its own address, so two arms could face
   different reporting distortion on the same case. Resolved at CP6.1: it is a
   named stream and the reporting layer reads only shared streams. OBS-3.
@@ -1159,3 +1406,11 @@ Resolved:
 - 2026-08-30 — A83: §10.1 — the retry-timing claim is withdrawn and recorded as a measured negative result.
 - 2026-08-30 — A84: §10.1 — model selection is decided on uplift calibration; a split ships a stated hybrid.
 - 2026-08-30 — A85: §5.3 and §13 — the agent's liquidity belief is its own POLICY_PARAMS entry; S7 lives in the policy because it needs an EV.
+- 2026-08-30 — A86: §9.1 added — a dispatched `request_mandate_update` can revive a dead mandate, at a delay, with the success drawn from the shared `mandate_revival_draw` stream and conditioned on `intent_type`. §9's retry ban is restated as a rule about the credential rather than the class; §5.7 gains `mandate_update_due_tick` and `mandate_revived`; §14.2 gains two streams. `class_retry_cap.dead_instrument` moves 0 → 2. Tests WLD-3, WLD-4, WLD-5.
+- 2026-08-30 — A87: §17 — the action grid moves to `settle/policy/grid.py`; `settle/agent/` may not import `settle/runner/`. Resolves OQ-50. Test POL-8.
+- 2026-08-30 — A88: §10.1 — the estimator memoises on `(action, tick, last_attempt_tick)` within a case and warms the remaining decision horizon on a miss. An optimisation only: POL-9 asserts bit-identical probabilities. Resolves OQ-49.
+- 2026-08-30 — A89: §6.1 added — a dispatched contact can lead to a customer-initiated payment, at a delay, drawn from the shared `contact_response_draw` stream and conditioned on `intent_type` and on §8's debtor behaviour. It settles through the same `settle()` a debit does and reports through the same §6 layer. §5.7 gains `contact_response_due_tick` and `contact_response_verb`; §14.2 gains two streams. Tests WLD-6, WLD-7, WLD-8, WLD-9. Resolves OQ-51.
+- 2026-08-30 — A90: §5.7 and §10.1 — `last_attempt_tick` recorded on `CaseState` and passed by the policy, closing the train/serve skew on `days_since_last_attempt` and `has_prior_attempt`. Test EST-12. Resolves OQ-52.
+- 2026-08-30 — A91: §10.1 — A84's uplift-calibration rule is implemented in `train.py` and both criteria are printed; model artifacts become `out/model_<sha>.pkl` with an `out/model.latest` pointer. Resolves OQ-53.
+- 2026-08-30 — A92: §10.1 — the calibrator is part of the model and enters selection as its own candidate; selection is `min(uplift ECE)` subject to a resolution floor, because uplift ECE is blind to a scorer that has stopped discriminating. Isotonic is rejected on resolution and the cost to the reported ECE is stated. Test EST-13. Resolves OQ-54.
+- 2026-08-30 — A93: §10.1 — `days_since_last_attempt` is computed at the dispatch moment rather than the decision tick, so it varies across the offsets it is asked to separate; `hours_to_contact_window` added for the same reason. 46 features.

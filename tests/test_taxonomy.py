@@ -159,16 +159,44 @@ def test_TAX_3_do_nothing_is_viable_for_every_class():
 
 @pytest.mark.parametrize("code", ["card_expired", "mandate_revoked", "card_stolen"])
 @pytest.mark.parametrize("rail", list(Rail))
-def test_LEG_1_dead_instrument_yields_no_retry_ever(code, rail):
-    actions = legal_actions(case(decline_code=code, rail=rail), state())
+@pytest.mark.parametrize(
+    "dead", [MandateState.EXPIRED, MandateState.REVOKED, MandateState.NONE]
+)
+def test_LEG_1_dead_instrument_yields_no_retry_while_the_mandate_is_dead(code, rail, dead):
+    """A86 narrowed §9's ban to what it was always about: a dead credential.
+
+    Every `dead_instrument` case the generator produces starts here —
+    `mandate_state_dead.active` is 0.00 — so this is the state the class is in
+    unless a re-authorisation actually happened.
+    """
+    subject = case(decline_code=code, rail=rail, mandate_state=dead)
+    actions = legal_actions(subject, state())
     assert not [a for a in actions if isinstance(a, Retry)]
     assert not [a for a in actions if isinstance(a, SwitchRail)]
     assert ActionType.RETRY not in {a.type for a in actions}
 
 
+@pytest.mark.parametrize("code", ["card_expired", "mandate_revoked", "card_stolen"])
+@pytest.mark.parametrize("rail", list(Rail))
+def test_LEG_1_a_re_authorised_mandate_reopens_the_debit_path(code, rail):
+    """A86. `request_mandate_update` was legal, selected, and structurally
+    incapable of succeeding: the class had no debit verb at all, so nothing it
+    could do could ever move money. A mandate that comes back ACTIVE is a new
+    instrument, and the ban on retrying the old one does not describe it."""
+    subject = case(decline_code=code, rail=rail, mandate_state=MandateState.ACTIVE)
+    types = {a.type for a in legal_actions(subject, state())}
+    assert ActionType.RETRY in types
+    # A66's rule, still derived: a class that may retry may serve notice, or it
+    # is unreachable on enach by construction.
+    if rail is Rail.ENACH:
+        assert ActionType.SERVE_NOTICE in types
+
+
 def test_LEG_1_dead_instrument_still_offers_a_path_to_a_new_mandate():
     """Forbidding retry must not leave the class with nothing to do."""
-    actions = legal_actions(case(decline_code="card_expired"), state())
+    actions = legal_actions(
+        case(decline_code="card_expired", mandate_state=MandateState.REVOKED), state()
+    )
     assert ActionType.REQUEST_MANDATE_UPDATE in {a.type for a in actions}
 
 
@@ -181,10 +209,16 @@ def test_LEG_1_dead_instrument_still_offers_a_path_to_a_new_mandate():
 def test_LEG_2_legal_actions_is_always_a_subset_of_the_closed_verb_set(code, rail):
     actions = legal_actions(case(decline_code=code, rail=rail), state())
     assert actions, f"{code} on {rail.value} has no legal action, not even do_nothing"
+    # A86 widens `dead_instrument` by `retry` when the mandate is ACTIVE, which
+    # the default fixture is. The widening is a rule about `mandate_state`, so
+    # the set it may reach is stated here rather than being waved through.
+    widened = {ActionType.SERVE_NOTICE}
+    if classify(code) is DeclineClass.DEAD_INSTRUMENT:
+        widened |= {ActionType.RETRY}
     for action in actions:
         assert type(action) in ACTION_MODELS
         assert action.type in ActionType
-        assert action.type in VIABLE_ACTIONS[classify(code)] or action.type is ActionType.SERVE_NOTICE
+        assert action.type in VIABLE_ACTIONS[classify(code)] or action.type in widened
 
 
 def test_LEG_2_a_stopped_case_has_no_legal_actions():

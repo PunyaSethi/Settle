@@ -134,7 +134,7 @@ Read by the generator or world to draw a value.
 | p_authorise.base_floor | 0.5 | ASSERTED | 2026-08-27 | pending D4 |
 | p_authorise.switch_rail_same_rail_penalty | 0.5 | ASSERTED | 2026-08-27 | pending D4 |
 | p_authorise.retry_cross_rail_penalty | 0.9 | ASSERTED | 2026-08-27 | pending D4 |
-| p_authorise.dnd_contact_penalty | 0.6 | ASSERTED | 2026-08-27 | pending D4 |
+| p_authorise.dnd_contact_penalty | 0.6 | ASSERTED | 2026-08-27 | pending D4. Read by `contact_response_probability` since A89; the branch in `p_authorise` that named it tested for `SendMessage`/`VoiceCall` inside a function only debits ever reached, so until CP9.1 it was a prior nothing could apply. |
 | p_authorise.day_window_start_hour | 9 | ASSERTED | 2026-08-27 | pending D4 |
 | p_authorise.day_window_end_hour | 20 | ASSERTED | 2026-08-27 | pending D4 |
 | natural_recovery.willing_able | 0.45 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
@@ -143,6 +143,24 @@ Read by the generator or world to draw a value.
 | natural_recovery.churned | 0.01 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
 | natural_recovery.adversarial | 0.03 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
 | natural_recovery.max_day | 45 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — B0's recovery is subtracted from every arm (§14.3) |
+| mandate_update.success_rate.willing_able | 0.35 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — with A86 this decides how much of the 17% `dead_instrument` slice is winnable at all, and it is the highest-leverage unsourced number in the world model. Sweep it and report the range over which the conclusion survives. |
+| mandate_update.success_rate.willing_broke | 0.15 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — with A86 this decides how much of the 17% `dead_instrument` slice is winnable at all, and it is the highest-leverage unsourced number in the world model. Sweep it and report the range over which the conclusion survives. |
+| mandate_update.success_rate.disputing | 0.03 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — with A86 this decides how much of the 17% `dead_instrument` slice is winnable at all, and it is the highest-leverage unsourced number in the world model. Sweep it and report the range over which the conclusion survives. |
+| mandate_update.success_rate.churned | 0.01 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — with A86 this decides how much of the 17% `dead_instrument` slice is winnable at all, and it is the highest-leverage unsourced number in the world model. Sweep it and report the range over which the conclusion survives. |
+| mandate_update.success_rate.adversarial | 0.02 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — with A86 this decides how much of the 17% `dead_instrument` slice is winnable at all, and it is the highest-leverage unsourced number in the world model. Sweep it and report the range over which the conclusion survives. |
+| mandate_update.response_delay_h_max | 72 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — the wait is what makes a mandate update a decision rather than a coin flip, and it competes with the 30-day decision horizon. |
+| contact_response.rate.willing_able | 0.2 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — A89 makes this the number that decides whether contacting anyone is viable at all, and therefore whether the contact-restraint result is a finding or an artefact. Sweep it and report the range over which the conclusion survives. |
+| contact_response.rate.willing_broke | 0.08 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — A89 makes this the number that decides whether contacting anyone is viable at all, and therefore whether the contact-restraint result is a finding or an artefact. Sweep it and report the range over which the conclusion survives. |
+| contact_response.rate.disputing | 0.02 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — A89 makes this the number that decides whether contacting anyone is viable at all, and therefore whether the contact-restraint result is a finding or an artefact. Sweep it and report the range over which the conclusion survives. |
+| contact_response.rate.churned | 0.005 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — A89 makes this the number that decides whether contacting anyone is viable at all, and therefore whether the contact-restraint result is a finding or an artefact. Sweep it and report the range over which the conclusion survives. |
+| contact_response.rate.adversarial | 0.02 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — A89 makes this the number that decides whether contacting anyone is viable at all, and therefore whether the contact-restraint result is a finding or an artefact. Sweep it and report the range over which the conclusion survives. |
+| contact_response.behaviour_multiplier.promise_and_break | 0.5 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — §8's debtors modulate A89's response rate, so this sets how much of the batch is reachable by a message. |
+| contact_response.behaviour_multiplier.dispute_stall | 0.2 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — §8's debtors modulate A89's response rate, so this sets how much of the batch is reachable by a message. |
+| contact_response.behaviour_multiplier.go_silent | 0.05 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — §8's debtors modulate A89's response rate, so this sets how much of the batch is reachable by a message. |
+| contact_response.behaviour_multiplier.opt_out_midway | 0.4 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — §8's debtors modulate A89's response rate, so this sets how much of the batch is reachable by a message. |
+| contact_response.behaviour_multiplier.hedged_reply | 0.6 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — §8's debtors modulate A89's response rate, so this sets how much of the batch is reachable by a message. |
+| contact_response.behaviour_multiplier.pay_then_complain | 1.3 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — §8's debtors modulate A89's response rate, so this sets how much of the batch is reachable by a message. |
+| contact_response.delay_h_max | 96 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — the wait is what makes a contact a decision rather than a coin flip, and a response due past the 30-day decision horizon still lands. |
 | world.liquidity_window_days | 1 | ASSERTED | 2026-08-27 | REQUIRED in the D4 sweep — highest-leverage parameter in the world model. It determines how often a time_shiftable retry lands inside the liquidity window, which is the mechanism the retry-timing result depends on. Must be swept in D4 sensitivity, and the range over which the conclusion survives reported explicitly. |
 
 ### Asserted targets
@@ -216,7 +234,7 @@ PAR-1 checks this table against it in both directions.
 | p_opt_out.voice_call | 0.031 | ASSERTED | 2026-08-30 | pending D4 |
 | p_opt_out.escalate_human | 0.018 | ASSERTED | 2026-08-30 | pending D4 |
 | ltv_months | 8 | ASSERTED | 2026-08-30 | pending D4 |
-| economic_stop_multiple | 3 | ASSERTED | 2026-08-30 | pending D4 |
+| economic_stop_multiple | 3 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — S7 refuses any action whose expected recovery is below this multiple of its cost. Measured at CP9: it declined a mandate-update campaign returning 1.69x on the project's own priced cost, so this constant, not the estimator, is what decides the restraint result at the margin. |
 | liquidity_window_days_belief | 1 | ASSERTED | 2026-08-30 | pending D4 |
 | action_grid.offset_now | 0 | ASSERTED | 2026-08-29 | pending D4 |
 | action_grid.offset_later_today | 6 | ASSERTED | 2026-08-29 | pending D4 |
@@ -229,10 +247,21 @@ PAR-1 checks this table against it in both directions.
 | action_grid.max_horizon_h | 720 | ASSERTED | 2026-08-29 | pending D4 |
 | class_retry_cap.time_shiftable | 4 | ASSERTED | 2026-08-29 | pending D4 |
 | class_retry_cap.transient | 3 | ASSERTED | 2026-08-29 | pending D4 |
-| class_retry_cap.dead_instrument | 0 | ASSERTED | 2026-08-29 | pending D4 |
+| class_retry_cap.dead_instrument | 2 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — A86 gives a re-authorised mandate a debit budget, and this caps it, so it bounds how much of the `dead_instrument` slice is recoverable. |
 | class_retry_cap.auth_abandoned | 0 | ASSERTED | 2026-08-29 | pending D4 |
 | class_retry_cap.ambiguous | 1 | ASSERTED | 2026-08-29 | pending D4 |
 | class_retry_cap.terminal | 0 | ASSERTED | 2026-08-29 | pending D4 |
+
+### Model selection constants
+
+Not priors about the world and not policy configuration — thresholds on how a
+model is chosen. They still move every number in §14.4, because they decide
+which model ships, which is the test §15 states for whether a number belongs
+here. Source of truth: `settle/agent/estimator.py`.
+
+| parameter | value | source | date | sensitivity |
+|---|---|---|---|---|
+| MAX_FLAT_DECISION_RATE | 0.05 | ASSERTED | 2026-08-30 | REQUIRED in the D4 sweep — the share of multi-option decisions a scorer may return one number for and still be selectable (A92). At CP10 it rejected GBM+isotonic at 11.5% flat and admitted the uncalibrated GBM at 0.0%; anything between those two leaves the outcome unchanged, and the sweep should report where it stops doing so. |
 
 ### Cost and opt-out parameters
 

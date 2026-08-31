@@ -35,10 +35,13 @@ from collections import Counter
 from datetime import timedelta, timezone
 from typing import Final
 
-from settle.policy.gates import evaluate_gates
-from settle.policy.legal import legal_actions
-from settle.policy.params import hour_offsets, max_horizon_h
-from settle.schema.action import Action, DoNothing, Retry
+from settle.policy.grid import (
+    action_offset,
+    candidate_pairs,
+    expand_grid,
+    gate_passing_pairs,
+)
+from settle.schema.action import Action, DoNothing
 from settle.schema.decision import Decision
 from settle.schema.enums import ArmMode, ChosenBy
 from settle.schema.observed import ObservedCase
@@ -73,43 +76,19 @@ def is_evaluation_seed(seed: int) -> bool:
     return seed in EVALUATION_SEED_RANGE
 
 
-def expand_grid(action: Action) -> list[Action]:
-    """One action becomes its row of the action grid. A71.
-
-    Only `retry` carries a schedulable offset in §5.3's frozen verb set, so the
-    grid widens retries and leaves every other verb at the runner's current
-    hour. That is a real limitation of the offset dimension, not a modelling
-    choice — see the CP5 report.
-    """
-    if not isinstance(action, Retry):
-        return [action]
-    return [
-        Retry(at_hour_offset=offset, rail=action.rail)
-        for offset in hour_offsets()
-        if offset < max_horizon_h()
-    ]
-
-
-def candidate_pairs(case: ObservedCase, state: CaseState) -> list[Action]:
-    """Every (action, hour) pair the grid admits for this case, before gates."""
-    pairs: list[Action] = []
-    for action in legal_actions(case, state):
-        pairs.extend(expand_grid(action))
-    return pairs
-
-
-def gate_passing_pairs(case: ObservedCase, state: CaseState) -> list[Action]:
-    """The set EXPLORE samples from, and the set OURS must search at CP8.
-
-    Binding constraint (A71): both arms enumerate candidates through this
-    function. An estimator trained on one grid and queried on another has zero
-    coverage exactly where it is asked to predict.
-    """
-    return [
-        action
-        for action in candidate_pairs(case, state)
-        if evaluate_gates(case, state, action, ArmMode.ENFORCE).allowed
-    ]
+# The grid itself lives in `settle/policy/grid.py` (OQ-50). It is re-exported
+# here because it was defined here for three checkpoints and callers reasonably
+# import it from the arm that made it famous — but there is one definition, and
+# `settle/agent/` now reaches it without importing `settle/runner/`.
+__all__ = [
+    "ExploreArm",
+    "candidate_pairs",
+    "coverage_cell",
+    "expand_grid",
+    "gate_passing_pairs",
+    "is_evaluation_seed",
+    "is_explore_seed",
+]
 
 
 def coverage_cell(case: ObservedCase, action: Action, tick: int) -> tuple:
@@ -121,12 +100,8 @@ def coverage_cell(case: ObservedCase, action: Action, tick: int) -> tuple:
     """
     from settle.diagnose.taxonomy import classify
 
-    at = (case.created_at + timedelta(hours=tick + _offset(action))).astimezone(IST)
+    at = (case.created_at + timedelta(hours=tick + action_offset(action))).astimezone(IST)
     return (action.type.value, at.hour // 4, classify(case.decline_code).value)
-
-
-def _offset(action: Action) -> int:
-    return action.at_hour_offset if isinstance(action, Retry) else 0
 
 
 class ExploreArm:

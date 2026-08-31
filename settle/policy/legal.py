@@ -32,7 +32,7 @@ from settle.schema.action import (
     SwitchRail,
     VoiceCall,
 )
-from settle.schema.enums import ActionType, Channel, DeclineClass, Rail
+from settle.schema.enums import ActionType, Channel, DeclineClass, MandateState, Rail
 from settle.schema.observed import ObservedCase
 from settle.schema.state import CaseState, CaseStatus
 from settle.diagnose.taxonomy import classify, viable_actions
@@ -99,6 +99,7 @@ def legal_actions(case: ObservedCase, state: CaseState) -> list[Action]:
     # Eligibility reads only `ObservedCase` (§2.1), so consulting it here does
     # not make this function state-dependent and LEG-3 keeps holding.
     viable = viable_actions(decline_class, is_escalation_eligible(case))
+    viable = _widen_for_a_live_mandate(case, decline_class, viable)
     actions: list[Action] = []
 
     if ActionType.DO_NOTHING in viable:
@@ -136,3 +137,40 @@ def legal_actions(case: ObservedCase, state: CaseState) -> list[Action]:
         actions.append(VoiceCall())
 
     return actions
+
+
+def _widen_for_a_live_mandate(
+    case: ObservedCase, decline_class: DeclineClass, viable: frozenset[ActionType]
+) -> frozenset[ActionType]:
+    """A86 — a replaced credential is not a dead one.
+
+    §9 forbids `dead_instrument` any retry, and that is right about a dead
+    credential: retrying an expired card gets the same decline. It is not a
+    statement about the card the customer supplies when they act on a
+    `request_mandate_update`. Once the mandate is ACTIVE again the instrument is
+    live, G3 stops blocking, and the debit paths open.
+
+    Stated as a derivation rather than a listed exception, for the reason A66
+    derived `serve_notice` — a listed exception drifts, a rule does not:
+
+        RETRY is viable for dead_instrument  <=>  mandate_state is ACTIVE
+
+    `serve_notice` follows from A66's own rule, because on `enach` a retry
+    outside a notice window is unreachable without it.
+
+    This reads `ObservedCase.mandate_state` and nothing from `CaseState`, so
+    LEG-3 still holds exactly: no gate-relevant state changes what
+    `legal_actions` returns, and EXPLORE's propensity denominator does not move
+    with a case's contact history. The mandate coming back is a change in the
+    world that the merchant observes, not a change in gate state.
+
+    Before A86 nothing could set `mandate_state` to ACTIVE on a
+    `dead_instrument` case — the generator draws it from `mandate_state_dead`,
+    where ACTIVE has probability zero — so this widening is reachable only
+    through a re-authorisation that actually happened.
+    """
+    if decline_class is not DeclineClass.DEAD_INSTRUMENT:
+        return viable
+    if case.mandate_state is not MandateState.ACTIVE:
+        return viable
+    return viable | {ActionType.RETRY, ActionType.SERVE_NOTICE}

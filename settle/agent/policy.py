@@ -31,6 +31,7 @@ from typing import Final
 
 from settle.agent.features import action_channel
 from settle.policy.gates import evaluate_gates
+from settle.policy.grid import candidate_pairs
 from settle.policy.params import POLICY_PARAMS, action_cost_paise, opt_out_cost_paise
 from settle.schema.action import Action, DoNothing
 from settle.schema.decision import Alternative
@@ -75,8 +76,6 @@ def choose(
     arm_mode: ArmMode = ArmMode.ENFORCE,
 ) -> PolicyDecision:
     """Pick the highest-EV gate-passing action, or stop."""
-    from settle.runner.arms.explore import candidate_pairs
-
     # A71's binding constraint: OURS searches the same grid EXPLORE sampled.
     # An estimator trained on one grid and queried on another has zero coverage
     # exactly where it is asked to predict.
@@ -85,7 +84,17 @@ def choose(
     # One batched call rather than one per candidate. A policy that queried the
     # model per option would spend most of a run inside sklearn's per-call
     # overhead, and the grid is the same shape every time.
-    probabilities = estimator.predict_pairs(case, [DoNothing(), *pairs], state.tick)
+    #
+    # `last_attempt_tick` is passed, not defaulted. Until CP9.1 this argument was
+    # omitted and the estimator saw `None` on every serve-time call, while
+    # `train.py` reconstructed the real value from the decision stream — so
+    # `days_since_last_attempt` and `has_prior_attempt` meant different things in
+    # training and in use, and `has_prior_attempt` ranked 4th of 45 by
+    # permutation importance. The model was being asked its questions in a
+    # different shape than it learned them (EST-12).
+    probabilities = estimator.predict_pairs(
+        case, [DoNothing(), *pairs], state.tick, state.last_attempt_tick
+    )
     baseline = probabilities[0]
 
     alternatives: list[Alternative] = []

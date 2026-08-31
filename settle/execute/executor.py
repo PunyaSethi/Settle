@@ -21,21 +21,28 @@ project.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final
 
 from settle.policy.gates import idempotency_key
 from settle.sim.generator import PARAMS, behaviour_for
 from settle.policy.legal import is_contact, is_debit
 from settle.schema.action import Action
-from settle.schema.enums import ReportedStatus
+from settle.schema.enums import ActionType, ReportedStatus
 from settle.schema.observed import ObservedCase
 from settle.schema.outcome import ReportedOutcome
 from settle.schema.state import CaseState, as_of
 from settle.sim.observability import ObservabilityConfig, report
 from settle.sim.streams import Streams
 from settle.sim.truth import ActualOutcome, HiddenTruth
-from settle.sim.world import attempt, reversal_at
+from settle.sim.world import (
+    attempt,
+    contact_payment,
+    contact_response_delay_h,
+    mandate_response_delay_h,
+    mandate_revives,
+    reversal_at,
+)
 
 REVERSAL_DELAY_DAYS_MAX: Final[int] = int(PARAMS["reversal_delay_days_max"])
 
@@ -116,6 +123,100 @@ def execute(
         actual,
         case_id=case.case_id,
         tick=state.tick,
+        config=observability,
+        streams=world.streams,
+        authorised_at=at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mandate re-authorisation. SPEC §6, §9, A86.
+# ---------------------------------------------------------------------------
+#
+# A pending re-authorisation is world state, so the two questions about it are
+# answered here and nowhere else. `settle/runner/` may not import `settle.sim`
+# (RUN-9) — it holds a `WorldHandle` it never opens — so the runner asks these
+# two functions instead of reaching into the simulator itself.
+
+def mandate_update_delay(case: ObservedCase, state: CaseState, world: WorldHandle) -> int:
+    """How many hours until the requested re-authorisation lands, if it does.
+
+    Drawn at the tick the request was dispatched. The mandate stays dead for the
+    whole of it, which is what stops A86 from being a coin flip at dispatch.
+    """
+    return mandate_response_delay_h(case, state.tick, world.streams)
+
+
+def mandate_update_taken(case: ObservedCase, world: WorldHandle, due_tick: int) -> bool:
+    """Did the customer actually re-authorise, at the tick it landed?
+
+    Conditioned on intent inside the world model: a churned customer does not
+    re-authorise. Shared across arms, so this is a fact about the customer
+    rather than about which arm happened to ask.
+
+    Addressed at `due_tick`, not at whatever tick the runner noticed. The runner
+    wakes for the due tick but can be carried past it — `next_interesting_tick`
+    clamps to the decision horizon — and an arm that noticed late would
+    otherwise draw a different number from one that noticed on time, which is
+    exactly the coupling §14.2 exists to remove.
+    """
+    return mandate_revives(case, world.truth, due_tick, world.streams)
+
+
+# ---------------------------------------------------------------------------
+# Contact response. SPEC §6, A89.
+# ---------------------------------------------------------------------------
+#
+# A pending customer response is world state, so the questions about it are
+# answered here. `settle/runner/` may not import `settle.sim` (RUN-9), and the
+# debtor behaviour that modulates the response is `settle/sim/debtors.py`
+# territory the runner must never see — the agent gets the words a debtor says,
+# never the behaviour that produced them.
+
+def contact_response_delay(case: ObservedCase, state: CaseState, world: WorldHandle) -> int:
+    """How many hours until a dispatched contact could be answered with money."""
+    return contact_response_delay_h(case, state.tick, world.streams)
+
+
+def contact_response_outcome(
+    case: ObservedCase,
+    world: WorldHandle,
+    verb: ActionType,
+    due_tick: int,
+    observability: ObservabilityConfig,
+) -> ReportedOutcome | None:
+    """Resolve one pending contact response, and report what the agent hears.
+
+    Returns `None` when the customer did not pay — which is most of the time,
+    and is silence rather than a failure: nothing was submitted to a rail, so
+    there is no decline for a gateway to report.
+
+    When they did pay, the outcome is recorded on the handle for reconciliation
+    and pushed through the same reporting layer a debit's outcome goes through.
+    That is deliberate: a customer-initiated payment can be dropped on the way
+    back, leaving the agent chasing someone who has already paid (SF-2), and it
+    can be duplicated into a second dispatch (SF-3). Routing it around §6 would
+    make messaging the one channel with perfect observability.
+    """
+    behaviour = behaviour_for(world.streams.master_seed, case.case_id)
+    at = case.created_at + timedelta(hours=due_tick)
+    actual = contact_payment(
+        case, world.truth, behaviour, verb, at, due_tick, world.streams
+    )
+    if actual is None:
+        return None
+
+    reversed_when: datetime | None = None
+    if actual.settled and actual.reversed and actual.settled_at is not None:
+        reversed_when = reversal_at(
+            case, actual.settled_at, due_tick, world.streams, REVERSAL_DELAY_DAYS_MAX
+        )
+    world.actuals.append((actual, reversed_when))
+
+    return report(
+        actual,
+        case_id=case.case_id,
+        tick=due_tick,
         config=observability,
         streams=world.streams,
         authorised_at=at,

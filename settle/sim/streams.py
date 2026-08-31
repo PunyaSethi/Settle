@@ -61,6 +61,32 @@ STREAM_TICK_UNITS: Final[dict[str, str]] = {
     # incremental subtraction mean anything.
     "natural_recovery_draw": "per case",
     "natural_recovery_day": "per case",
+    # A86 — whether a dispatched `request_mandate_update` is acted on, and how
+    # long the customer takes to act. Shared for the same reason as the rest: a
+    # customer who would re-authorise does so whichever arm asked, so two arms
+    # requesting an update at the same tick must get the same answer.
+    #
+    # Two addresses rather than one. The success is drawn at the tick the
+    # re-authorisation lands and the delay at the tick it was requested, so a
+    # single stream would make the delay of a second request the same number
+    # that decided the first request's success whenever they coincide. Nothing
+    # in the domain couples those, and a coupling nobody declared is exactly
+    # what §14.2 exists to remove.
+    "mandate_revival_draw": "per pending re-authorisation",
+    "mandate_response_delay": "per mandate update dispatched",
+    # A89 — whether a contacted customer goes and pays of their own accord, and
+    # how long they take. Shared for the same reason as the mandate pair: a
+    # customer who would respond to a message does so whichever arm sent it, so
+    # two arms contacting at the same tick must get the same answer. Without
+    # that, "B2 contacts more and recovers more" would be partly a statement
+    # about which arm drew the luckier numbers.
+    #
+    # Two addresses, not one, for the reason stated above: the response is drawn
+    # at the tick it lands and the delay at the tick of the contact, and one
+    # stream would couple a later contact's delay to an earlier contact's
+    # outcome whenever they coincide.
+    "contact_response_draw": "per pending customer response",
+    "contact_response_delay": "per contact dispatched",
 }
 STREAM_NAMES: Final[tuple[str, ...]] = tuple(STREAM_TICK_UNITS)
 

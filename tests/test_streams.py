@@ -180,10 +180,18 @@ def test_STR_4_out_of_range_addresses_are_refused():
 
 def test_STR_4_every_named_stream_declares_its_tick_unit():
     assert set(STREAM_TICK_UNITS) == set(STREAM_NAMES)
-    assert len(STREAM_NAMES) == 10
+    assert len(STREAM_NAMES) == 14
     assert all(unit.startswith("per ") for unit in STREAM_TICK_UNITS.values())
     # CP6.1 added three. `out_of_order` was drawing from its own address, which
     # weakened CRN for one reporting parameter; the natural-recovery pair has to
     # be shared or §14.3's subtraction compares different self-cures.
     for added in ("out_of_order", "natural_recovery_draw", "natural_recovery_day"):
+        assert added in STREAM_NAMES
+    # CP9/A86 added two. Whether a customer re-authorises is a fact about the
+    # customer, so it must not differ between two arms that both asked.
+    for added in ("mandate_revival_draw", "mandate_response_delay"):
+        assert added in STREAM_NAMES
+    # CP9.1/A89 added two more, for the same reason: whether a contacted
+    # customer goes and pays is a fact about the customer, not about the arm.
+    for added in ("contact_response_draw", "contact_response_delay"):
         assert added in STREAM_NAMES

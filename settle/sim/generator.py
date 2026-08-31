@@ -209,6 +209,73 @@ PARAMS: Final[dict[str, float]] = {
     "natural_recovery.adversarial": 0.03,
     # A self-cure lands somewhere in the first N days; the draw picks when.
     "natural_recovery.max_day": 45.0,
+    # --- mandate re-authorisation (§6, §9, A86) ---
+    # P(a dispatched `request_mandate_update` is acted on and the mandate comes
+    # back ACTIVE), conditioned on intent. Before A86 nothing revived a dead
+    # mandate, so `dead_instrument` — 17% of the batch — was unwinnable by
+    # construction and every arm's apparent restraint was inflated by it.
+    #
+    # This is now the highest-leverage unsourced number in the model: it decides
+    # how much of that 17% is winnable at all. Set conservatively. Public
+    # card-updater and dunning benchmarks cluster well above these figures, and
+    # they measure a whole campaign rather than one request; these are per
+    # request, and the batch-weighted rate lands near 0.18.
+    #
+    # Conditioned on intent because a churned customer does not re-authorise —
+    # the whole point of asking is that only some customers still want the
+    # service.
+    "mandate_update.success_rate.willing_able": 0.35,
+    "mandate_update.success_rate.willing_broke": 0.15,
+    "mandate_update.success_rate.disputing": 0.03,
+    "mandate_update.success_rate.churned": 0.01,
+    "mandate_update.success_rate.adversarial": 0.02,
+    # How long the customer takes to act on the link, in hours. Uniform on
+    # [1, max]. The delay is the reason this is not a coin flip at dispatch: the
+    # mandate is still dead while it runs, and the arm has to decide what to do
+    # in the meantime.
+    "mandate_update.response_delay_h_max": 72.0,
+    # --- contact response (§6, A89) ---
+    # P(a contacted customer goes and pays of their own accord), before the
+    # verb's own lift and the debtor behaviour multiplier below:
+    #
+    #     p = contact_response.rate[intent]
+    #         x action_lift[verb]
+    #         x contact_response.behaviour_multiplier[behaviour]
+    #         x (dnd penalty, for the verbs p_authorise already applies it to)
+    #
+    # Before A89 this path did not exist. `world.attempt()` ran for debits only,
+    # so `action_lift.send_message`, `.voice_call` and `.escalate_human` were
+    # unreachable code carrying PRIORS rows, and no contact could recover money
+    # for any class. Every contact-heavy against contact-light comparison the
+    # project had made was measuring the absence of a mechanism.
+    #
+    # Conditioned on intent, because a message to someone who has left is not a
+    # message that gets paid. Set conservatively: these are per single contact,
+    # not per campaign, and natural recovery (0.45 for willing_able) already
+    # carries the customers who would have paid unprompted. What is left for a
+    # message to earn is the incremental slice on top of that.
+    #
+    # willing_able x send_message x a neutral behaviour lands near 4%, and
+    # x voice_call near 14%. Those are the numbers to argue with.
+    "contact_response.rate.willing_able": 0.20,
+    "contact_response.rate.willing_broke": 0.08,
+    "contact_response.rate.disputing": 0.02,
+    "contact_response.rate.churned": 0.005,
+    "contact_response.rate.adversarial": 0.02,
+    # Debtor behaviour modulates it (§8). `go_silent` is near zero by
+    # definition; `promise_and_break` commits and then mostly does not pay;
+    # `pay_then_complain` is the one behaviour that reliably pays, which is what
+    # makes it the pair to SF-2.
+    "contact_response.behaviour_multiplier.promise_and_break": 0.5,
+    "contact_response.behaviour_multiplier.dispute_stall": 0.2,
+    "contact_response.behaviour_multiplier.go_silent": 0.05,
+    "contact_response.behaviour_multiplier.opt_out_midway": 0.4,
+    "contact_response.behaviour_multiplier.hedged_reply": 0.6,
+    "contact_response.behaviour_multiplier.pay_then_complain": 1.3,
+    # How long the customer takes to act, in hours. Uniform on [1, max]. Same
+    # role as A86's delay: it is what stops this being a coin flip at dispatch,
+    # and it means an arm that contacts has to decide what to do while it waits.
+    "contact_response.delay_h_max": 96.0,
     # --- liquidity window (§9 time_shiftable) ---
     # How many days before payday still counts as "money is about to be there".
     # The highest-leverage number in the world model: it decides how often a

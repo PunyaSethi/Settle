@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from settle.agent.estimator import Estimator
+from settle.agent.estimator import Estimator, latest_model_path
 from settle.agent.policy import (
     ECONOMIC_STOP_MULTIPLE,
     choose,
@@ -25,9 +25,9 @@ from settle.schema.state import CaseState
 from settle.sim.generator import generate_batch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MODEL = REPO_ROOT / "out" / "model.pkl"
+MODEL = latest_model_path(REPO_ROOT / "out")
 
-pytestmark = pytest.mark.skipif(not MODEL.exists(), reason="no trained model; run CP7 training")
+pytestmark = pytest.mark.skipif(MODEL is None, reason="no trained model; run CP7 training")
 
 
 @pytest.fixture(scope="module")
@@ -252,3 +252,173 @@ def test_POL_7_the_policy_reads_only_observed_case_derived_features():
     attrs = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
     for banned in ("true_recoverability", "payday_day", "patience_budget", "intent_type", "truth"):
         assert banned not in attrs, banned
+
+
+# --------------------------------------------------------------------------
+# POL-8 — the dependency runs one direction only. OQ-50.
+# --------------------------------------------------------------------------
+
+def test_POL_8_the_agent_package_never_imports_the_runner():
+    """OQ-50. The agent is the thing being evaluated; the runner is the harness
+    that evaluates it. A dependency from agent to runner makes the policy
+    unusable without the experiment that measured it.
+
+    It is the same error class as CP3.1's escalation rule, where the policy
+    could not recompute eligibility because the rule lived inside `settle/sim/`
+    (§2.1, A62). Both are fixed the same way: the shared rule moves into
+    `settle/policy/`, and this test keeps it there.
+    """
+    offenders = []
+    for path in sorted((REPO_ROOT / "settle" / "agent").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            else:
+                continue
+            for name in names:
+                if name == "settle.runner" or name.startswith("settle.runner."):
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno} -> {name}")
+    assert not offenders, offenders
+
+
+def test_POL_8_the_grid_has_one_definition():
+    """A71's binding constraint is only checkable if there is one function to
+    check. EXPLORE re-exports it; it does not redefine it."""
+    from settle.policy import grid
+    from settle.runner.arms import explore
+
+    for name in ("candidate_pairs", "expand_grid", "gate_passing_pairs"):
+        assert getattr(explore, name) is getattr(grid, name), name
+
+
+def test_POL_8_the_policy_searches_the_grid_it_imports(batch, estimator):
+    """And it is the same set, not merely the same name."""
+    from settle.policy.grid import candidate_pairs
+
+    case = batch.cases[3].observed
+    state = state_for(case, tick=48)
+    decision = choose(case, state, [DoNothing()], estimator)
+    assert len(decision.alternatives) == len(candidate_pairs(case, state))
+
+
+# --------------------------------------------------------------------------
+# POL-9 — the estimator memo changes speed and nothing else. OQ-49.
+# --------------------------------------------------------------------------
+
+def test_POL_9_warming_returns_bit_identical_probabilities(batch):
+    """A cache that changes an answer is not a cache, it is a second model.
+
+    The memo is keyed on `(action, tick, last_attempt_tick)` within one case,
+    which is exactly what `feature_row` reads. If that ever stops being true
+    this test fails before any metric does.
+    """
+    import numpy as np
+
+    payload = pickle.loads(MODEL.read_bytes())
+    model = payload["models"][payload["winner"]]
+    cold = Estimator(model, payload["winner"], warm=False)
+    warm = Estimator(model, payload["winner"], warm=True)
+
+    from settle.policy.grid import candidate_pairs
+
+    for generated in batch.cases[:25]:
+        case = generated.observed
+        for tick in (0, 24, 96, 240):
+            actions = [DoNothing(), *candidate_pairs(case, state_for(case, tick=tick))]
+            assert np.array_equal(
+                cold.predict_pairs(case, actions, tick),
+                warm.predict_pairs(case, actions, tick),
+            ), (case.case_id, tick)
+
+    assert warm.calls < cold.calls, "warming did not reduce the number of calls"
+
+
+def test_POL_9_the_memo_is_dropped_when_the_case_changes(batch):
+    """A86 lets a case change under the runner — a revived mandate advances
+    `mandate_state`. The memo is bound by value, so it cannot answer for a case
+    it was not built for."""
+    from settle.schema.enums import MandateState
+
+    payload = pickle.loads(MODEL.read_bytes())
+    estimator = Estimator(payload["models"][payload["winner"]], payload["winner"])
+    case = batch.cases[0].observed
+
+    estimator.predict_pairs(case, [DoNothing()], 0)
+    assert estimator._cache
+
+    revived = case.model_copy(update={"mandate_state": MandateState.ACTIVE})
+    estimator.predict_pairs(revived, [DoNothing()], 0)
+    assert estimator._cache_case == revived
+
+
+# --------------------------------------------------------------------------
+# POL-10 — the policy can tell its options apart. SPEC §10.1 (A92), CP10.
+# --------------------------------------------------------------------------
+#
+# EST-13 guards the estimator. This is the same property seen from the policy's
+# side: if every alternative comes back with the same EV, `argmax` is picking
+# arbitrarily and the ties break toward `do_nothing`, which is free. That is
+# what produced CP9.1's result — OURS declining retries costing 5 paise at zero
+# opt-out risk, because the model scored them identically to inaction.
+
+def test_POL_10_alternatives_are_not_all_scored_alike(batch, estimator, capsys):
+    """Across real decisions, the recorded alternatives must actually differ."""
+    from settle.policy.grid import candidate_pairs
+
+    flat = varied = skipped = 0
+    for generated in batch.cases[:120]:
+        case = generated.observed
+        for tick, last in ((0, None), (24, 0), (120, 24)):
+            state = state_for(case, tick=tick, last_attempt_tick=last)
+            if len(candidate_pairs(case, state)) < 2:
+                skipped += 1
+                continue
+            decision = choose(case, state, [DoNothing()], estimator)
+            evs = {a.ev_paise for a in decision.alternatives}
+            if len(evs) == 1:
+                flat += 1
+            else:
+                varied += 1
+
+    total = flat + varied
+    with capsys.disabled():
+        print(f"\n  multi-option decisions {total}  varied {varied}  flat {flat}"
+              f"  ({flat / total:.1%})")
+    assert total, "no multi-option decisions to test"
+    assert flat / total <= 0.10, (
+        f"{flat / total:.1%} of decisions score every option identically — the "
+        "argmax is choosing arbitrarily and ties break toward do_nothing"
+    )
+
+
+def test_POL_10_a_near_free_action_is_taken_when_its_uplift_is_real(batch):
+    """The economics CP10 turned on. A retry costs 5 paise and risks no opt-out,
+    so S7 clears it at roughly 0.03% uplift — three hundred times below what a
+    message needs. A policy that declines a retry at 6 points of uplift is not
+    being restrained, it is failing to see the difference."""
+    from settle.policy.params import action_cost_paise, opt_out_cost_paise
+    from settle.schema.enums import ActionType, Channel
+
+    case = next(
+        g.observed for g in batch.cases
+        if g.observed.decline_code == "insufficient_funds"
+    )
+    retry_need = ECONOMIC_STOP_MULTIPLE * (
+        action_cost_paise(ActionType.RETRY)
+        + opt_out_cost_paise(ActionType.RETRY, case.plan_value_paise)
+    ) / case.amount_paise
+    message_need = ECONOMIC_STOP_MULTIPLE * (
+        action_cost_paise(ActionType.SEND_MESSAGE, Channel.SMS)
+        + opt_out_cost_paise(ActionType.SEND_MESSAGE, case.plan_value_paise, Channel.SMS)
+    ) / case.amount_paise
+
+    assert retry_need < 0.001, retry_need
+    assert message_need > 0.05, message_need
+    assert message_need / retry_need > 100, "the two thresholds are no longer worlds apart"
+
+    # And the policy acts on it: a modest uplift on retries must beat inaction.
+    decision = choose(case, state_for(case), [DoNothing()], _RewardRetry(uplift=0.02))
+    assert decision.action.type is ActionType.RETRY, decision.reason_code

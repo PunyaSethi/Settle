@@ -1,0 +1,41 @@
+# CP10 — the discrimination failure. Last modelling checkpoint.
+#
+# Diagnosed before fixing (G1-G4), then one change at a time. The answer was
+# G2: post-hoc isotonic calibration was erasing the resolution of the quantity
+# the policy ranks on, and the criterion the model is selected by could not see
+# it. A92 makes the calibrator a selection candidate and adds a resolution
+# floor; A93 fixes a feature that should have varied across candidates and did
+# not.
+
+SPEC.md
+PRIORS.md
+settle/agent/estimator.py
+settle/agent/train.py
+settle/agent/features.py
+settle/agent/calibration.py
+settle/agent/policy.py
+tests/test_estimator.py
+tests/test_policy.py
+checkpoints/cp10.allowlist
+
+# --- carried from CP9 and CP9.1, which are not yet committed ---------------
+# The gate's baseline is HEAD (CP8), so both earlier checkpoints still read as
+# changed. Listed so the CP10 gate reports on CP10's work rather than on the two
+# checkpoints before it. Their justifications are in their own allowlists.
+settle/policy/grid.py
+settle/policy/legal.py
+settle/policy/params.py
+settle/diagnose/taxonomy.py
+settle/execute/executor.py
+settle/runner/arms/explore.py
+settle/runner/case_runner.py
+settle/schema/state.py
+settle/sim/generator.py
+settle/sim/streams.py
+settle/sim/world.py
+tests/test_ours.py
+tests/test_streams.py
+tests/test_taxonomy.py
+tests/test_world.py
+checkpoints/cp9.allowlist
+checkpoints/cp9_1.allowlist

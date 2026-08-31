@@ -30,6 +30,35 @@ exploit.
 A blocked schedule is logged and cleared, never silently dropped. At most one is
 pending; a second choice replaces it and the replacement is logged.
 
+Mandate re-authorisation
+------------------------
+A dispatched `request_mandate_update` is a request, not an event. It sets
+`state.mandate_update_due_tick` some hours out, and the mandate stays dead for
+the whole of that wait — which is the point: an arm that asks has to decide what
+to do while it waits. When that tick arrives the runner asks the world boundary
+whether the customer actually re-authorised.
+
+If they did, the runner advances the case's own `mandate_state` to ACTIVE.
+`mandate_state` is an `ObservedCase` field (§5.1) and a merchant genuinely sees
+the mandate registry flip, so this is the agent learning something true rather
+than being handed hidden truth. G3 then stops blocking and the retry paths §9
+closes for a *dead* credential open again for the replacement.
+
+Contact response
+----------------
+A dispatched contact is a request too. It sets `state.contact_response_due_tick`
+some hours out, and when that tick arrives the runner asks the world boundary
+whether the customer went and paid of their own accord (A89). Most of the time
+they did not, and that is silence rather than a failure — nothing was submitted
+to a rail, so there is no decline to report.
+
+Money already in flight is not erased by the agent's decision horizon. When a
+stop fires with a response still pending, the runner resolves it before
+stopping: the world runs to 60 days (§13.1) and a customer who was going to pay
+on day 31 still pays. The draw is addressed at the *due* tick, never at the tick
+the runner noticed, so an arm that stops early and an arm that runs on get the
+same answer.
+
 Tick advancement
 ----------------
 Stepping hourly across the 30-day decision horizon is 720 iterations per case
@@ -41,7 +70,21 @@ runner jumps to the next tick at which a verdict *could* differ:
     G1 the next window opening, G2 the minimum-gap or rolling-window expiry,
     G6 the promise date;
   * a pending commitment contributes its `due_tick`;
+  * a pending re-authorisation contributes its own, because a revived mandate
+    opens debit paths the arm should be given the chance to use;
   * otherwise the runner advances by one day.
+
+A pending *contact response* (A89) deliberately does not. There is nothing for
+an arm to decide at the moment a customer pays of their own accord, and waking
+for it would insert extra decision points at whatever hour the response happens
+to land — mostly hours when G1 shuts the contact window. Measured: it cut
+EXPLORE's coverage of every contact verb by about 60% and inflated `do_nothing`,
+because the extra ticks fall where contacts are illegal. It would also hand
+contact-heavy arms more decisions than contact-light ones for no reason
+connected to policy. The response is resolved opportunistically instead —
+whenever the runner is next awake past its due tick, when a later contact
+replaces it, and at the stop — and because the draw is addressed at the *due*
+tick, resolving late gives bit-identically the same answer as resolving on time.
 
 A gate that cannot clear by waiting contributes nothing. G9 with no notice
 served is the example: no amount of time opens a notice window, only a
@@ -60,7 +103,15 @@ from datetime import date, datetime, time, timedelta
 from typing import Final
 
 from settle.audit.chain import Ledger
-from settle.execute.executor import WorldHandle, dispatch_key, execute
+from settle.execute.executor import (
+    WorldHandle,
+    contact_response_delay,
+    contact_response_outcome,
+    dispatch_key,
+    execute,
+    mandate_update_delay,
+    mandate_update_taken,
+)
 from settle.policy.gates import (
     CONTACT_WINDOW_START_HOUR_IST,
     FREQUENCY_WINDOW_HOURS,
@@ -74,7 +125,15 @@ from settle.policy.legal import is_contact, is_debit, legal_actions
 from settle.policy.params import POLICY_PARAMS
 from settle.policy.stops import DECISION_HORIZON_HOURS, check_stops
 from settle.schema.action import Action, Retry, SwitchRail
-from settle.schema.enums import ActionType, Actor, ArmMode, LedgerKind, Rail, ReportedStatus
+from settle.schema.enums import (
+    ActionType,
+    Actor,
+    ArmMode,
+    LedgerKind,
+    MandateState,
+    Rail,
+    ReportedStatus,
+)
 from settle.schema.observed import ObservedCase
 from settle.schema.outcome import ReportedOutcome
 from settle.text.classify import ReplyKind, ReplyVerdict, classify_reply
@@ -150,6 +209,12 @@ def next_interesting_tick(
     if state.scheduled is not None:
         candidates.add(state.scheduled.due_tick)
 
+    # A86. The mandate can come back while the arm is doing nothing, and the
+    # case looks entirely different afterwards, so it is worth waking for.
+    if state.mandate_update_due_tick is not None:
+        candidates.add(state.mandate_update_due_tick)
+
+
     future = {tick for tick in candidates if tick > state.tick}
     proposed = min(future) if future else state.tick + DECISION_CADENCE_HOURS
     # A commitment due past the horizon simply never fires; S6 stops the case
@@ -168,6 +233,14 @@ def _apply_dispatch(case: ObservedCase, state: CaseState, action: Action, key: s
     elif isinstance(action, SwitchRail):
         # A67: a switch is a change of instrument, not a retry.
         update["rail_switches_used"] = state.rail_switches_used + 1
+
+    if is_debit(action):
+        # The feature `days_since_last_attempt` is built from this. Recorded at
+        # the tick the debit actually fires, which for a scheduled retry is its
+        # `due_tick` and not the tick it was chosen at — the bank saw it when it
+        # was submitted. `train.py` reconstructs the same quantity by adding the
+        # offset to the decision tick (EST-12).
+        update["last_attempt_tick"] = state.tick
 
     # A70: G4 counts submissions to the card network, whichever verb produced
     # them. A retry on card and a switch to card are both submissions.
@@ -245,6 +318,56 @@ def run_case(
             arm=arm.name,
         )
 
+    def resolve_contact_response(current: CaseState) -> CaseState:
+        """Settle up a pending customer response. A89.
+
+        Addressed at the *due* tick rather than at the tick the runner noticed,
+        so an arm that stops early and an arm that runs on get the same answer
+        for the same case (WLD-8).
+
+        A payment is reported through the same §6 layer a debit's outcome goes
+        through, so it can be dropped into an SF-2 or duplicated into an SF-3.
+        It does not set `settled` — INV-1 gives that to reconciliation alone.
+        """
+        due_tick = current.contact_response_due_tick
+        verb = current.contact_response_verb
+        cleared = current.model_copy(
+            update={"contact_response_due_tick": None, "contact_response_verb": None}
+        )
+        if due_tick is None or verb is None:
+            return cleared
+
+        outcome = contact_response_outcome(case, world, verb, due_tick, observability)
+        ledger.append(
+            case_id=case.case_id,
+            at=case.created_at + timedelta(hours=due_tick),
+            kind=LedgerKind.EVENT,
+            actor=Actor.SYSTEM,
+            payload={"verb": verb.value, "paid": outcome is not None, "due_tick": due_tick},
+            reason_code="CONTACT_PAID" if outcome else "CONTACT_IGNORED",
+            arm=arm.name,
+        )
+        if outcome is None:
+            # Silence, not a decline. Nothing reached a rail.
+            return cleared
+
+        ledger.append(
+            case_id=case.case_id,
+            at=case.created_at + timedelta(hours=due_tick),
+            kind=LedgerKind.REPORTED_OUTCOME,
+            actor=Actor.SYSTEM,
+            payload={
+                "status": outcome.status.value,
+                "arrival_count": outcome.arrival_count,
+                "payment_id": outcome.payment_id,
+                "customer_initiated": True,
+            },
+            reason_code=f"REPORTED_{outcome.status.value.upper()}",
+            arm=arm.name,
+        )
+        updated, _ = _apply_outcome(case, cleared, outcome)
+        return updated
+
     def dispatch(current: CaseState, action: Action) -> CaseState:
         """WRITE-AHEAD. The key is built from the tick the action fires at, the
         entry is written and flushed, and only then does anything touch the
@@ -261,6 +384,51 @@ def run_case(
         )
         outcome = execute(action, case, current, world, observability)
         updated = _apply_dispatch(case, current, action, key)
+
+        # A86. Asking for a new mandate is a request, not an event. It lands
+        # some hours later, and the mandate is dead for all of them. A second
+        # request while one is outstanding replaces it — the customer has one
+        # link in front of them, not a queue.
+        if action.type is ActionType.REQUEST_MANDATE_UPDATE:
+            due = current.tick + mandate_update_delay(case, current, world)
+            updated = updated.model_copy(update={"mandate_update_due_tick": due})
+            ledger.append(
+                case_id=case.case_id,
+                at=as_of(case.created_at, current),
+                kind=LedgerKind.DECISION,
+                actor=Actor.SYSTEM,
+                payload={"due_tick": due, "channel": getattr(action, "channel").value},
+                reason_code="MANDATE_UPDATE_REQUESTED",
+                arm=arm.name,
+            )
+
+        # A89. Every contact can be answered with a payment the customer makes
+        # themselves. It lands hours later, and a second contact replaces the
+        # pending one — a customer answers the most recent message, not a queue.
+        if is_contact(action):
+            # An outstanding chance is taken, not discarded. The draw is
+            # addressed at its own due tick, so resolving it now gives exactly
+            # the answer it would have given on time — and dropping it would
+            # quietly penalise whichever arm contacts most, which is the arm
+            # whose viability this checkpoint exists to test.
+            if updated.contact_response_due_tick is not None:
+                updated = resolve_contact_response(updated)
+            due = current.tick + contact_response_delay(case, current, world)
+            updated = updated.model_copy(
+                update={
+                    "contact_response_due_tick": due,
+                    "contact_response_verb": action.type,
+                }
+            )
+            ledger.append(
+                case_id=case.case_id,
+                at=as_of(case.created_at, current),
+                kind=LedgerKind.DECISION,
+                actor=Actor.SYSTEM,
+                payload={"due_tick": due, "verb": action.type.value},
+                reason_code="CONTACT_RESPONSE_PENDING",
+                arm=arm.name,
+            )
         ledger.append(
             case_id=case.case_id,
             at=as_of(case.created_at, current),
@@ -301,10 +469,18 @@ def run_case(
             )
         return updated
 
+
     for _ in range(MAX_STEPS_PER_CASE):
         # 1. stops
         stop = check_stops(case, state, arm.mode)
         if stop is not None:
+            # A89. Money already in flight is not erased by the agent's decision
+            # horizon. The world runs to 60 days (§13.1), so a customer who was
+            # going to pay on day 31 still pays — dropping it here would
+            # understate every contact-bearing arm by exactly the contacts it
+            # made near the end.
+            if state.contact_response_due_tick is not None:
+                state = resolve_contact_response(state)
             state = state.model_copy(
                 update={
                     "status": CaseStatus.STOPPED,
@@ -314,6 +490,42 @@ def run_case(
             )
             log(LedgerKind.STOP, Actor.POLICY, {"stop": stop.stop}, stop.reason_code)
             return state
+
+        # 1b. a requested re-authorisation that has come due. A86.
+        #     The world boundary answers; the runner never asks the simulator
+        #     directly (RUN-9). A success advances the case's own
+        #     `mandate_state`, which is an observable — the mandate registry
+        #     really does flip — so G3 stops blocking and §9's retry ban on a
+        #     *dead* credential no longer describes this case.
+        if (
+            state.mandate_update_due_tick is not None
+            and state.tick >= state.mandate_update_due_tick
+        ):
+            taken = mandate_update_taken(case, world, state.mandate_update_due_tick)
+            state = state.model_copy(
+                update={
+                    "mandate_update_due_tick": None,
+                    "mandate_revived": state.mandate_revived or taken,
+                }
+            )
+            if taken:
+                case = case.model_copy(update={"mandate_state": MandateState.ACTIVE})
+            log(
+                LedgerKind.EVENT,
+                Actor.SYSTEM,
+                {
+                    "re_authorised": taken,
+                    "mandate_state": case.mandate_state.value,
+                },
+                "MANDATE_REVIVED" if taken else "MANDATE_UPDATE_IGNORED",
+            )
+
+        # 1c. a customer response that has come due. A89.
+        if (
+            state.contact_response_due_tick is not None
+            and state.tick >= state.contact_response_due_tick
+        ):
+            state = resolve_contact_response(state)
 
         # 2. a commitment that has come due. Gates are evaluated again: the
         #    verdict that authorised it may be days old.

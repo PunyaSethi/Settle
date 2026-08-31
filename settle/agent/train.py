@@ -1,7 +1,7 @@
 """Train the estimator. SPEC §10.1.
 
     python -m settle.agent.train --explore out/explore.decisions.jsonl \
-        --labels out/labels.jsonl --out out/model.pkl
+        --labels out/labels.jsonl --out out/
 
 Training rows come from the EXPLORE arm only, and labels come from
 reconciliation against `ActualOutcome`. A label taken from `ReportedOutcome`
@@ -12,6 +12,7 @@ would teach the model to predict what the webhook said, which is the one thing
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pickle
 from pathlib import Path
@@ -20,13 +21,18 @@ from typing import Final
 import numpy as np
 
 from settle.agent.calibration import headline, reliability_table
+from settle.agent.estimator import MAX_FLAT_DECISION_RATE
+from settle.agent.estimator import LATEST_POINTER
 from settle.agent.estimator import (
     Estimator,
     build_matrix,
     constant_rate_baseline,
     fit_gbm,
     fit_logistic,
+    has_usable_resolution,
     split_by_case,
+    uplift_calibration,
+    uplift_resolution,
 )
 from settle.agent.features import IST, action_offset, dispatch_moment
 from settle.diagnose.taxonomy import classify
@@ -53,9 +59,14 @@ def load_rows(explore_path: Path, labels_path: Path, cases_path: Path):
             case = ObservedCase.model_validate_json(line)
             cases[case.case_id] = case
 
-    # The tick of the previous debit on each case, reconstructed from the
-    # decision stream in order. Not hidden truth: a merchant knows when it last
-    # tried to charge someone.
+    # The tick at which the previous debit on each case was *dispatched*,
+    # reconstructed from the decision stream in order. Not hidden truth: a
+    # merchant knows when it last tried to charge someone.
+    #
+    # Dispatched, not chosen. `retry(at_hour_offset=72)` is a commitment that
+    # fires three days later (A73), and the bank sees it when it is submitted.
+    # `CaseState.last_attempt_tick` records the firing tick, so this must add
+    # the offset or the two sides of EST-12 would be measuring different events.
     last_debit: dict[str, int] = {}
     debit_verbs = {"retry", "switch_rail"}
 
@@ -67,7 +78,7 @@ def load_rows(explore_path: Path, labels_path: Path, cases_path: Path):
         tick = int(decision.decision_id.split(":")[1])
         previous = last_debit.get(decision.case_id)
         if decision.action.type.value in debit_verbs:
-            last_debit[decision.case_id] = tick
+            last_debit[decision.case_id] = tick + action_offset(decision.action)
 
         label = labels.get(decision.decision_id)
         case = cases.get(decision.case_id)
@@ -152,11 +163,50 @@ def _timing_spread(model, rows, test_rows) -> None:
         print("           learned little about timing; §9's liquidity claim is unsupported.")
 
 
+# Resolution is a property of the decisions the policy will actually face, so it
+# is measured on real candidate grids rather than on training rows. The cases
+# come from the held-out test split — which `load_rows` already read off disk —
+# and never from the generator: `settle/agent/` may not import `settle.sim`
+# (INV-8, EST-1, GEN-2), and a probe that reached for a simulator would be the
+# agent package deciding it is allowed to build its own world.
+probe_size: Final[int] = 600
+PROBE_TICKS: Final[tuple[tuple[int, int | None], ...]] = (
+    (0, None), (24, 0), (120, 24), (336, 120),
+)
+
+
+def _resolution_probe(rows, test_rows, n: int = probe_size) -> list[tuple]:
+    """`(case, tick, last_attempt_tick, actions)` for multi-option decisions."""
+    from settle.policy.grid import candidate_pairs
+    from settle.schema.enums import ArmMode
+    from settle.schema.state import CaseState
+
+    seen: dict[str, ObservedCase] = {}
+    for index in test_rows:
+        case = rows[index][0]
+        seen.setdefault(case.case_id, case)
+
+    out: list[tuple] = []
+    for case in seen.values():
+        for tick, last in PROBE_TICKS:
+            state = CaseState(
+                case_id=case.case_id, arm="OURS", arm_mode=ArmMode.ENFORCE,
+                tick=tick, last_attempt_tick=last,
+            )
+            pairs = candidate_pairs(case, state)
+            if len(pairs) > 1:
+                out.append((case, tick, last, pairs))
+        if len(out) >= n:
+            break
+    return out[:n]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="settle.agent.train", description=__doc__)
     parser.add_argument("--explore", type=Path, default=Path("out/explore.decisions.jsonl"))
     parser.add_argument("--labels", type=Path, default=Path("out/labels.jsonl"))
-    parser.add_argument("--out", type=Path, default=Path("out/model.pkl"))
+    # A directory, not a file. The artifact is content-addressed inside it.
+    parser.add_argument("--out", type=Path, default=Path("out"))
     parser.add_argument("--cases", type=Path, default=Path("out/explore.cases.jsonl"))
     args = parser.parse_args(argv)
 
@@ -173,9 +223,16 @@ def main(argv: list[str] | None = None) -> int:
     Xca, yca = X[calib.rows], y[calib.rows]
     Xte, yte = X[test.rows], y[test.rows]
 
+    # Four candidates, because the calibrator is part of the model. CP10
+    # measured isotonic erasing 15.1% of decisions' resolution while moving
+    # uplift ECE by 0.0003, so "GBM" and "GBM, isotonically calibrated" are two
+    # different answers to the policy's question and both have to be on the
+    # table (A92).
     models = {
-        "GBM": Estimator(fit_gbm(Xtr, ytr, Xca, yca), "GBM"),
-        "LR": Estimator(fit_logistic(Xtr, ytr, Xca, yca), "LR"),
+        "GBM+iso": Estimator(fit_gbm(Xtr, ytr, Xca, yca), "GBM+iso"),
+        "GBM": Estimator(fit_gbm(Xtr, ytr, Xca, yca, calibrated=False), "GBM"),
+        "LR+iso": Estimator(fit_logistic(Xtr, ytr, Xca, yca), "LR+iso"),
+        "LR": Estimator(fit_logistic(Xtr, ytr, Xca, yca, calibrated=False), "LR"),
     }
     cells = [cell_for(*rows[i]) for i in test.rows]
     constant = constant_rate_baseline(ytr)
@@ -203,7 +260,66 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {name:<6}{len(pn):>8,}{expected_calibration_error(pn, yn):>9.4f}"
               f"{brier_score(pn, yn):>9.4f}{np.mean(yn):>8.4f}")
 
-    winner = min(results, key=lambda n: results[n][2]["ece"])
+    # --- model selection. SPEC §10.1 (A84) --------------------------------
+    #
+    # On the calibration of the *uplift*, not of the probability. §10.2
+    # subtracts `p_settle(do_nothing)` from every action, so the quantity the
+    # policy is sensitive to is the difference and not either term alone. A
+    # model can win overall and lose the difference, and shipping it would mean
+    # selecting on a number the policy never uses.
+    #
+    # A84 has said this since CP8. Until CP9.1 the code selected on overall ECE
+    # and `uplift_calibration` was called by nothing — so the rule was a claim in
+    # a document with no code path, and at CP9 the two disagreed: LR won overall
+    # and GBM won the difference. The decision is printed here rather than left
+    # implicit in a `min()`.
+    uplift = {name: uplift_calibration(model, rows, X, y, test.rows)
+              for name, (model, _, _) in results.items()}
+    probe = _resolution_probe(rows, test.rows)
+    resolution = {name: uplift_resolution(model, probe)
+                  for name, (model, _, _) in results.items()}
+
+    print("\n model selection — A84 (calibration of the uplift) x A92 (resolution of it)")
+    print(f"  {'model':<10}{'ECE overall':>13}{'ECE uplift':>12}{'spread':>10}"
+          f"{'flat':>8}{'usable':>9}")
+    for name in results:
+        r = resolution[name]
+        print(
+            f"  {name:<10}{results[name][2]['ece']:>13.4f}{uplift[name]['ece_uplift']:>12.4f}"
+            f"{r['median']:>10.4f}{r['flat_rate']:>8.1%}"
+            f"{('yes' if has_usable_resolution(r) else 'NO'):>9}"
+        )
+    print(f"  resolution probed on {probe_size:,} real multi-option decisions;"
+          f" a model flat on more than {MAX_FLAT_DECISION_RATE:.0%} of them is not selectable")
+
+    usable = [n for n in results if has_usable_resolution(resolution[n])]
+    rejected = [n for n in results if n not in usable]
+    if rejected:
+        print(f"  rejected on resolution: {', '.join(rejected)}"
+              f" — a scorer that returns one number for every option is a constant,"
+              f" whatever its calibration says (A92)")
+    if not usable:
+        raise SystemExit(
+            "every candidate failed the resolution floor. The policy has nothing to rank with; "
+            "fix the features or the calibrator before shipping a model."
+        )
+
+    winner = min(usable, key=lambda name: uplift[name]["ece_uplift"])
+    overall_winner = min(results, key=lambda name: results[name][2]["ece"])
+    if overall_winner != winner:
+        print(
+            f"\n  the criteria disagree: {overall_winner} wins overall ECE"
+            f" ({results[overall_winner][2]['ece']:.4f} vs {results[winner][2]['ece']:.4f}),"
+            f" {winner} wins the uplift"
+            f" ({uplift[winner]['ece_uplift']:.4f} vs {uplift[overall_winner]['ece_uplift']:.4f})."
+        )
+        print("  §10.2 uses the difference and nothing else, so the uplift winner ships.")
+        print(f"  The cost is stated rather than hidden: the shipped model's probability"
+              f" level is calibrated to {results[winner][2]['ece']:.4f} ECE, not"
+              f" {results[overall_winner][2]['ece']:.4f}.")
+    else:
+        print(f"\n  both criteria agree on {winner}.")
+
     model, p_win, stats = results[winner]
 
     # EST-6 — the reliability diagram, as numbers.
@@ -237,12 +353,37 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\ntiming signal ({winner}) — same case, same verb, eight offsets")
     _timing_spread(model, rows, test.rows)
 
-    print(f"\nshipping: {winner} (lower ECE on held-out test)")
+    print(f"\nshipping: {winner} (lower uplift ECE on held-out test — A84)")
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.out.open("wb") as handle:
-        pickle.dump({"winner": winner, "models": {n: m.model for n, (m, _, _) in results.items()}}, handle)
-    print(f"model -> {args.out}   hash {results[winner][0].artifact_hash()[:16]}")
+    # --- the artifact. SPEC §10.1, CP9.1 D2 -------------------------------
+    #
+    # Content-addressed, and never overwritten. The CP8-to-CP9 comparison is
+    # unrecoverable because retraining replaced `out/model.pkl` in place, so the
+    # world change and the model change could not be separated afterwards. A
+    # run that cannot be re-measured against its predecessor is a run whose
+    # numbers cannot be attributed.
+    payload = {
+        "winner": winner,
+        "models": {n: m.model for n, (m, _, _) in results.items()},
+        "selection": {
+            "criterion": "uplift_ece, subject to a resolution floor (A84 x A92)",
+            "uplift": {n: uplift[n]["ece_uplift"] for n in uplift},
+            "overall": {n: results[n][2]["ece"] for n in results},
+            "resolution": {n: resolution[n] for n in resolution},
+            "rejected_on_resolution": rejected,
+        },
+        "rows": len(rows),
+        "cases": len(set(case_ids)),
+    }
+    blob = pickle.dumps(payload)
+    sha = hashlib.sha256(blob).hexdigest()[:12]
+    out_dir = args.out if args.out.suffix == "" else args.out.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    artifact = out_dir / f"model_{sha}.pkl"
+    artifact.write_bytes(blob)
+    (out_dir / LATEST_POINTER).write_text(artifact.name + "\n", encoding="utf-8")
+    print(f"model -> {artifact}")
+    print(f"latest -> {out_dir / LATEST_POINTER}   ({artifact.name})")
     return 0
 
 

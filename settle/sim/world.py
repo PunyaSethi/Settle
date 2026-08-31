@@ -18,7 +18,7 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict
 
 from settle.schema.action import Action, Retry, SendMessage, SwitchRail, VoiceCall
-from settle.schema.enums import ActionType, IntentType
+from settle.schema.enums import ActionType, DebtorBehaviour, IntentType
 from settle.schema.observed import ObservedCase
 from settle.sim.generator import PARAMS
 from settle.sim.streams import Streams
@@ -221,3 +221,175 @@ def natural_recovery_at(
     ):
         return None
     return case.created_at + timedelta(days=natural_recovery_day(case, streams))
+
+
+# ---------------------------------------------------------------------------
+# Mandate re-authorisation. SPEC §6, §9, A86.
+# ---------------------------------------------------------------------------
+#
+# Before A86, `request_mandate_update` was legal, selected, and structurally
+# incapable of succeeding. It is contact-bearing, so `execute` never reached
+# `attempt()` for it, and nothing anywhere revived a dead mandate. §9 named it
+# as the recovery path for `dead_instrument` while the simulator gave that path
+# a hard zero — 17% of the batch unwinnable by construction.
+#
+# The mechanism is deliberately not a coin flip at dispatch. A dispatch sets a
+# pending re-authorisation some hours out; the mandate is still dead while that
+# runs, and the arm has to decide what to do in the meantime. Only when the
+# pending re-authorisation lands does the success draw happen, at the tick it
+# lands on.
+
+def mandate_response_delay_h(case: ObservedCase, tick: int, streams: Streams) -> int:
+    """Hours between asking for a new mandate and the customer acting on it.
+
+    Uniform on [1, max]. Drawn at the tick of the request, from a stream shared
+    by every arm: two arms asking the same customer at the same moment wait the
+    same time.
+    """
+    roll = streams.value(case.case_id, "mandate_response_delay", tick)
+    return 1 + int(roll * PARAMS["mandate_update.response_delay_h_max"])
+
+
+def mandate_revival_probability(intent: IntentType) -> float:
+    """P(the customer re-authorises | they were asked), by intent.
+
+    Conditioned on intent because a churned customer does not re-authorise. The
+    whole point of asking is that only some customers still want the service,
+    and a single global rate would make `intent_type` decorative in the place it
+    decides most.
+    """
+    return PARAMS[f"mandate_update.success_rate.{intent.value}"]
+
+
+def mandate_revives(
+    case: ObservedCase, truth: HiddenTruth, at_tick: int, streams: Streams
+) -> bool:
+    """Does the pending re-authorisation take, at the tick it lands?
+
+    Drawn from `mandate_revival_draw` at `at_tick`, shared across arms. Two arms
+    whose requests land on the same tick get the same answer, which is what
+    keeps §14.3's comparison about the policy rather than about luck.
+    """
+    return streams.value(case.case_id, "mandate_revival_draw", at_tick) < (
+        mandate_revival_probability(truth.intent_type)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Contact response. SPEC §6, A89.
+# ---------------------------------------------------------------------------
+#
+# Before A89, no contact verb could produce a settlement. `world.attempt()` ran
+# for debits only, so a message, a voice call and a human escalation were
+# dispatched, priced, gated and logged while being structurally incapable of
+# recovering money. Every comparison of contact-heavy against contact-light arms
+# made before this point was measuring the absence of a mechanism, not a policy
+# difference. A86 fixed one instance of this; A89 fixes the class.
+#
+# The mechanism mirrors A86 deliberately, and for the same reason it is not a
+# coin flip at dispatch: a contact sets a pending customer response some hours
+# out, and the arm has to decide what to do while it waits.
+#
+# What a contact produces is a CUSTOMER-INITIATED payment, not a debit. The
+# distinction matters in one direction only — nobody submitted anything to a
+# rail, so G3, G4 and G9 have nothing to say about it — and in every other
+# respect it is a payment: it runs through `settle()` like any other, so
+# `auth_no_settle_rate`, `settlement_lag_h` and `will_reverse` all apply. A
+# payment prompted by a message can still be an SF-1, and it can still be
+# dropped by the reporting layer into an SF-2.
+
+# The verbs `p_authorise` applies the DND penalty to. Inherited from there
+# rather than decided again here: `p_authorise.dnd_contact_penalty` had a PRIORS
+# row and was unreachable for exactly the reason A89 exists — the branch that
+# read it tested for `SendMessage` and `VoiceCall` inside a function only debits
+# ever reached.
+_DND_PENALISED_VERBS: Final[frozenset[ActionType]] = frozenset(
+    {ActionType.SEND_MESSAGE, ActionType.VOICE_CALL}
+)
+
+
+def contact_response_delay_h(case: ObservedCase, tick: int, streams: Streams) -> int:
+    """Hours between a contact going out and the customer acting on it.
+
+    Uniform on [1, max]. Drawn at the tick of the contact, from a stream shared
+    by every arm: two arms messaging the same customer at the same moment wait
+    the same time.
+    """
+    roll = streams.value(case.case_id, "contact_response_delay", tick)
+    return 1 + int(roll * PARAMS["contact_response.delay_h_max"])
+
+
+def contact_response_probability(
+    case: ObservedCase,
+    intent: IntentType,
+    behaviour: DebtorBehaviour,
+    verb: ActionType,
+) -> float:
+    """P(this contact is answered with a payment). Deterministic, no draws.
+
+    Three factors, each with its own PRIORS row and its own job:
+
+    * `contact_response.rate[intent]` — a message to someone who has left is not
+      a message that gets paid. A single global rate would make `intent_type`
+      decorative in the place it decides most.
+    * `action_lift[verb]` — the same constant that scales a debit's chance,
+      reused rather than duplicated. A voice call outranks an SMS here for the
+      same declared reason it does there, and `serve_notice` sits at zero
+      because a regulatory notice is not a persuasion.
+    * `contact_response.behaviour_multiplier[behaviour]` — §8's debtors. A
+      `go_silent` customer is near zero by definition; `pay_then_complain` is
+      the one that reliably pays.
+    """
+    lift = ACTION_LIFT[verb]
+    if lift == 0.0:
+        return 0.0
+    p = (
+        PARAMS[f"contact_response.rate.{intent.value}"]
+        * lift
+        * PARAMS[f"contact_response.behaviour_multiplier.{behaviour.value}"]
+    )
+    if case.dnd_flag and verb in _DND_PENALISED_VERBS:
+        p *= PARAMS["p_authorise.dnd_contact_penalty"]
+    return min(max(p, 0.0), 1.0)
+
+
+def contact_responds(
+    case: ObservedCase,
+    truth: HiddenTruth,
+    behaviour: DebtorBehaviour,
+    verb: ActionType,
+    at_tick: int,
+    streams: Streams,
+) -> bool:
+    """Does the customer pay, at the tick the response lands?
+
+    Drawn from `contact_response_draw` at `at_tick` — the tick the response is
+    *due*, never the tick the runner happens to notice it. Two arms whose
+    contacts land on the same tick get the same answer, and an arm that notices
+    late gets the same answer it would have got on time (WLD-8).
+    """
+    return streams.value(case.case_id, "contact_response_draw", at_tick) < (
+        contact_response_probability(case, truth.intent_type, behaviour, verb)
+    )
+
+
+def contact_payment(
+    case: ObservedCase,
+    truth: HiddenTruth,
+    behaviour: DebtorBehaviour,
+    verb: ActionType,
+    at: datetime,
+    at_tick: int,
+    streams: Streams,
+) -> ActualOutcome | None:
+    """The payment a contact prompted, or None if the customer did not pay.
+
+    `settle()` is called, not reimplemented. A customer-initiated payment is
+    still a payment: it can authorise and never settle, and it can settle and
+    reverse. Routing it around the two-step that carries INV-1 would make
+    messaging the one channel where money is certain — which is the opposite of
+    the failure this project exists to model (WLD-7).
+    """
+    if not contact_responds(case, truth, behaviour, verb, at_tick, streams):
+        return None
+    return settle(case, truth, at, at_tick, streams)

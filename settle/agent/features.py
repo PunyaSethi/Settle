@@ -80,7 +80,21 @@ FEATURE_NAMES: Final[tuple[str, ...]] = (
     "in_liquidity_window",
     "days_since_last_attempt",
     "has_prior_attempt",
+    "hours_to_contact_window",
 )
+
+
+# G1's window, restated as a distance so it is usable as a number rather than a
+# flag. `inside_contact_window` answers yes/no; this answers how far off.
+_CONTACT_WINDOW_START: Final[int] = 8
+_CONTACT_WINDOW_END: Final[int] = 19
+
+
+def _hours_to_contact_window(hour: int) -> int:
+    """Hours from `hour` until G1 next permits a contact. Zero if inside."""
+    if _CONTACT_WINDOW_START <= hour < _CONTACT_WINDOW_END:
+        return 0
+    return (_CONTACT_WINDOW_START - hour) % 24
 
 
 def days_to_month_start(day: int, month: int) -> int:
@@ -159,9 +173,20 @@ def feature_row(
         "in_liquidity_window": float(
             days_to_month_start(ist.day, ist.month) <= LIQUIDITY_WINDOW_DAYS
         ),
+        # Measured at the dispatch moment, not at the decision moment. A retry
+        # chosen now and fired in 72 hours reaches the bank 72 hours further
+        # from the last attempt, and until CP10 this read `tick` alone — so the
+        # feature that ranks 2nd of 45 by permutation importance was *identical*
+        # across all eight offsets of a retry, which are exactly the candidates
+        # the policy has to tell apart (G4).
         "days_since_last_attempt": float(
-            0.0 if last_attempt_tick is None else max(0, tick - last_attempt_tick) / 24.0
+            0.0 if last_attempt_tick is None else max(0, tick + offset - last_attempt_tick) / 24.0
         ),
+        # Hours until G1 would let a contact through, at the dispatch moment.
+        # Zero inside the window. It varies across offsets, which `offset_hours`
+        # alone does not tell the model anything useful about: 18h and 30h are
+        # both "tomorrow", but one lands at 02:00 and the other at 14:00.
+        "hours_to_contact_window": float(_hours_to_contact_window(ist.hour)),
         "has_prior_attempt": float(last_attempt_tick is not None),
     }
     for rail in _RAILS:

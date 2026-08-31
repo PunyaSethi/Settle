@@ -37,7 +37,14 @@ POLICY_PARAMS: Final[dict[str, float]] = {
     # is a different rule than the one §9 states.
     "class_retry_cap.time_shiftable": 4,
     "class_retry_cap.transient": 3,
-    "class_retry_cap.dead_instrument": 0,
+    # A86. Zero until CP9, which was correct while `dead_instrument` could never
+    # offer a retry at all — and which then silently blocked the one path the
+    # class has. A re-authorised mandate is a fresh instrument, so it gets a
+    # budget; two rather than `transient`'s three, because the customer has just
+    # done something for us and burning their new card on repeated declines is
+    # the wrong way to thank them. `legal_actions` and G3 both already require
+    # the mandate to be ACTIVE, so this cap can only ever bite after a revival.
+    "class_retry_cap.dead_instrument": 2,
     "class_retry_cap.auth_abandoned": 0,
     "class_retry_cap.ambiguous": 1,
     "class_retry_cap.terminal": 0,

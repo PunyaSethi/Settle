@@ -1,0 +1,60 @@
+# CP9 — fix the world, then re-measure.
+#
+# A86 gives `request_mandate_update` a way to succeed; A87 turns the agent ->
+# runner dependency around; A88 makes a 10k OURS run survivable; then every
+# number from CP8 is measured again over a batch where 17% of cases are no
+# longer unwinnable by construction.
+
+SPEC.md
+PRIORS.md
+settle/sim/world.py
+settle/sim/generator.py
+settle/schema/state.py
+settle/runner/case_runner.py
+settle/policy/grid.py
+settle/agent/policy.py
+settle/runner/arms/explore.py
+settle/agent/estimator.py
+tests/test_world.py
+tests/test_policy.py
+checkpoints/cp9.allowlist
+
+# --- outside the stated allowlist, and why --------------------------------
+#
+# Part A as specified is inert without all five of these. Each is stated with
+# what would have happened had it been left alone.
+#
+# streams.py — the §14.2 stream set is closed and `stream_value` raises on a
+# name it does not know, so `mandate_revival_draw` cannot exist without a row
+# here. The instruction names the stream; this is where streams live.
+settle/sim/streams.py
+#
+# executor.py — a pending re-authorisation is world state, and RUN-9 forbids
+# `settle/runner/` from importing `settle.sim`. The runner has to ask something
+# at the world boundary, and §17 says the executor is that boundary. Two
+# functions added, no behaviour changed.
+settle/execute/executor.py
+#
+# legal.py — `dead_instrument` had no debit verb at all, so a revived mandate
+# bought nothing: G3 would have stopped blocking a retry that `legal_actions`
+# never offered. This is where A86's "RETRY is viable <=> mandate ACTIVE"
+# derivation lives, next to A66's serve_notice rule.
+settle/policy/legal.py
+#
+# taxonomy.py — FORBIDDEN_ACTIONS listed RETRY for `dead_instrument`
+# unconditionally, which contradicts the derivation above. Narrowed to
+# SWITCH_RAIL; the condition is a property of `mandate_state`, which a
+# type-level table cannot express.
+settle/diagnose/taxonomy.py
+#
+# params.py — G10's `class_retry_cap.dead_instrument` was 0. Correct while the
+# class could never retry; a silent block on the one path it now has.
+settle/policy/params.py
+#
+# tests/test_taxonomy.py — LEG-1 and LEG-2 encoded the unconditional ban. LEG-1
+# is now parameterised over the three dead mandate states and gains the
+# positive case; LEG-2 states the widening rather than waving it through.
+tests/test_taxonomy.py
+#
+# tests/test_streams.py — STR-4 asserts the stream count. 10 -> 12.
+tests/test_streams.py

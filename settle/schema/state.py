@@ -25,7 +25,7 @@ from enum import Enum
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_serializer
 
 from settle.schema.action import Action
-from settle.schema.enums import ArmMode, StopClass
+from settle.schema.enums import ActionType, ArmMode, StopClass
 
 SCHEMA_CONFIG = ConfigDict(strict=True, extra="forbid", frozen=True)
 
@@ -90,6 +90,39 @@ class CaseState(BaseModel):
     promise_logged_at: AwareDatetime | None = None
 
     notice_window_until: AwareDatetime | None = None
+
+    # A86 — a dispatched `request_mandate_update` the customer has not answered
+    # yet. Recorded rather than inferred (§5.7): the tick the re-authorisation
+    # lands on is what the success draw is addressed by, so reconstructing it
+    # from the ledger later would give a different address and a different
+    # answer. `None` means nothing is outstanding.
+    mandate_update_due_tick: int | None = Field(default=None, ge=0)
+    # Whether the mandate actually came back. Once true the instrument is live
+    # again: G3 stops blocking, and §9's `dead_instrument` retry ban — which is
+    # a statement about a dead credential, not about a replaced one — no longer
+    # applies. The runner expresses this to the gates by advancing the case's
+    # own `mandate_state`, which is an observable a merchant genuinely sees
+    # change; this field is the record of why.
+    mandate_revived: bool = False
+
+    # A89 — a dispatched contact the customer has not answered yet. The verb is
+    # carried because the response probability scales with `action_lift`, so a
+    # voice call and an SMS are not the same pending event. One slot: a second
+    # contact replaces the first, because a customer has the most recent message
+    # in front of them, not a queue.
+    contact_response_due_tick: int | None = Field(default=None, ge=0)
+    contact_response_verb: ActionType | None = None
+
+    # The tick at which the most recent debit was dispatched. A feature, not a
+    # gate input: `days_since_last_attempt` and `has_prior_attempt` are built
+    # from it. It is recorded here because until CP9.1 the policy had nowhere to
+    # read it from and passed `None` on every call, while `train.py`
+    # reconstructed it from the decision stream — so the model was trained on
+    # one shape and queried in another, with `has_prior_attempt` ranking 4th by
+    # permutation importance. EST-12.
+    #
+    # Not hidden truth: a merchant knows when it last tried to charge someone.
+    last_attempt_tick: int | None = Field(default=None, ge=0)
 
     dispatched_keys: frozenset[str] = frozenset()
 

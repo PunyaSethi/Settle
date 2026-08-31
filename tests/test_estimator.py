@@ -362,3 +362,259 @@ def test_EXP_7_oversampling_actually_shifts_the_distribution():
     boosted = ExploreArm(90_000, oversample=True)
     assert plain.oversample is False and boosted.oversample is True
     assert boosted.target > 0
+
+
+# --------------------------------------------------------------------------
+# EST-12 — the row served is the row trained. SPEC §10.1.
+# --------------------------------------------------------------------------
+#
+# Until CP9.1 `settle/agent/policy.py` called `predict_pairs` without
+# `last_attempt_tick`, so the estimator saw `None` on every serve-time call
+# while `train.py` reconstructed the real value from the decision stream.
+# `days_since_last_attempt` and `has_prior_attempt` therefore meant different
+# things in training and in use, and `has_prior_attempt` ranked 4th of 45 by
+# permutation importance — the model was being asked its questions in a
+# different shape than it learned them.
+
+def test_EST_12_the_serve_row_is_byte_identical_to_the_train_row():
+    """Same inputs, same row. `build_matrix` is what `train.py` feeds the
+    model; `feature_vector` is what the estimator builds at serve time. If those
+    two ever diverge, every calibration number is measured on one shape and
+    used on another."""
+    import numpy as np
+
+    from settle.agent.estimator import build_matrix
+    from settle.agent.features import feature_vector
+    from settle.policy.grid import candidate_pairs
+    from settle.schema.action import DoNothing
+    from settle.schema.enums import ArmMode
+    from settle.schema.state import CaseState
+    from settle.sim.generator import generate_batch
+
+    batch = generate_batch(40, 42)
+    rows = []
+    for generated in batch.cases:
+        case = generated.observed
+        for tick, last in ((0, None), (24, 0), (96, 24), (400, 96)):
+            state = CaseState(
+                case_id=case.case_id, arm="OURS", arm_mode=ArmMode.ENFORCE,
+                tick=tick, last_attempt_tick=last,
+            )
+            for action in [DoNothing(), *candidate_pairs(case, state)]:
+                rows.append((case, action, tick, last))
+
+    trained = build_matrix(rows)
+    served = np.asarray([feature_vector(*row) for row in rows])
+    assert trained.shape == served.shape
+    assert np.array_equal(trained, served), "the train and serve rows differ"
+
+
+def test_EST_12_the_policy_passes_the_last_attempt_tick():
+    """The bug itself. A policy that omits the argument gets `None` for every
+    case forever, and the two features built from it are dead at serve time
+    while alive in training."""
+    import ast
+
+    tree = ast.parse((REPO_ROOT / "settle" / "agent" / "policy.py").read_text(encoding="utf-8"))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "predict_pairs"
+    ]
+    assert calls, "the policy no longer calls predict_pairs"
+    for call in calls:
+        passed = len(call.args) + len(call.keywords)
+        assert passed >= 4, (
+            f"predict_pairs called with {passed} arguments at line {call.lineno}; "
+            "last_attempt_tick is not being passed and the model sees None"
+        )
+
+
+def test_EST_12_the_runner_records_the_dispatch_tick_not_the_choice_tick():
+    """`retry(at_hour_offset=72)` is a commitment that fires three days later
+    (A73). The bank sees it when it is submitted, so state records the firing
+    tick — and `train.py` must add the offset to match, or the two sides of
+    EST-12 measure different events."""
+    import inspect
+
+    from settle.agent import train
+    from settle.runner import case_runner
+
+    recorded = inspect.getsource(case_runner._apply_dispatch)
+    assert 'update["last_attempt_tick"] = state.tick' in recorded
+
+    reconstructed = inspect.getsource(train.load_rows)
+    assert "last_debit[decision.case_id] = tick + action_offset(decision.action)" in reconstructed
+
+
+def test_EST_12_a_dispatched_debit_leaves_a_last_attempt_tick():
+    """End to end: after a retry fires, the state the policy reads carries the
+    tick, so the serve-time row stops being the `None` row."""
+    import tempfile
+
+    from settle.audit.chain import Ledger
+    from settle.execute.executor import WorldHandle
+    from settle.runner.arm import FirstLegalArm
+    from settle.runner.case_runner import run_case
+    from settle.sim.generator import generate_batch
+    from settle.sim.observability import ObservabilityConfig
+    from settle.sim.streams import Streams
+
+    batch = generate_batch(300, 42)
+    streams, config = Streams(42), ObservabilityConfig()
+    path = Path(tempfile.mkdtemp()) / "a.jsonl"
+    finals = []
+    with Ledger(path) as ledger:
+        for generated in batch.cases:
+            finals.append(
+                run_case(
+                    generated.observed,
+                    FirstLegalArm(),
+                    WorldHandle(truth=generated.truth, streams=streams),
+                    config,
+                    ledger,
+                )
+            )
+
+    debited = [f for f in finals if f.attempts_used or f.rail_switches_used]
+    assert debited, "no case debited, so there is nothing to record"
+    assert all(f.last_attempt_tick is not None for f in debited), (
+        "a case dispatched a debit and recorded no attempt tick"
+    )
+    assert all(f.last_attempt_tick is None for f in finals if f not in debited)
+
+
+# --------------------------------------------------------------------------
+# EST-13 — resolution, the thing uplift ECE cannot see. SPEC §10.1 (A92).
+# --------------------------------------------------------------------------
+#
+# CP10's finding. A84 selects on the calibration of the uplift, and uplift ECE
+# bins by predicted uplift before comparing against a matched control rate — so
+# a model that returns the same number for every candidate still gets binned and
+# still scores well. Isotonic calibration took the median within-decision uplift
+# spread from 6.2 points to 1.7 and made 21.0% of multi-option decisions
+# perfectly flat, while moving uplift ECE by 0.0017. The policy cannot rank what
+# the scorer will not separate, and the metric did not notice.
+
+def _probe_decisions(n=120):
+    """Real candidate grids, the way the policy will meet them."""
+    from settle.policy.grid import candidate_pairs
+    from settle.schema.enums import ArmMode
+    from settle.schema.state import CaseState
+    from settle.sim.generator import generate_batch
+
+    out = []
+    for generated in generate_batch(400, 42).cases:
+        case = generated.observed
+        for tick, last in ((0, None), (24, 0), (120, 24)):
+            state = CaseState(
+                case_id=case.case_id, arm="OURS", arm_mode=ArmMode.ENFORCE,
+                tick=tick, last_attempt_tick=last,
+            )
+            pairs = candidate_pairs(case, state)
+            if len(pairs) > 1:
+                out.append((case, tick, last, pairs))
+        if len(out) >= n:
+            break
+    return out[:n]
+
+
+class _Flat:
+    """Returns one probability for everything. The degenerate case."""
+
+    def predict_pairs(self, case, actions, tick, last_attempt_tick=None):
+        import numpy as np
+
+        return np.full(len(actions), 0.5)
+
+
+def test_EST_13_a_flat_scorer_is_caught():
+    """The guard has to fire on the thing it exists to catch, or it is
+    decoration. A model that scores every option identically has resolved
+    nothing, whatever its ECE says."""
+    from settle.agent.estimator import has_usable_resolution, uplift_resolution
+
+    resolution = uplift_resolution(_Flat(), _probe_decisions())
+    assert resolution["flat_rate"] == 1.0
+    assert resolution["median"] == 0.0
+    assert not has_usable_resolution(resolution)
+
+
+def test_EST_13_isotonic_costs_resolution_and_the_metric_does_not_notice():
+    """The measurement CP10 turns on, run in miniature.
+
+    Isotonic is monotone, so it can only tie candidates, never reorder them.
+    Ties are the damage: a step function with a few dozen levels cannot express
+    a difference smaller than one step, and a retry clears S7 at roughly 0.03%
+    uplift.
+    """
+    import numpy as np
+
+    from settle.agent.estimator import (
+        Estimator, calibrate, fit_gbm, uplift_resolution,
+    )
+
+    rows, y, case_ids = load_rows(EXPLORE, LABELS, CASES)
+    X = build_matrix(rows)
+    train, calib, _ = split_by_case(case_ids)
+    base = fit_gbm(X[train.rows], y[train.rows], X[calib.rows], y[calib.rows], calibrated=False)
+    isotonic = calibrate(base, X[calib.rows], y[calib.rows])
+
+    probe = _probe_decisions()
+    raw_res = uplift_resolution(Estimator(base, "raw"), probe)
+    iso_res = uplift_resolution(Estimator(isotonic, "iso"), probe)
+
+    assert iso_res["flat_rate"] > raw_res["flat_rate"], (
+        "isotonic did not flatten anything here; the CP10 finding no longer reproduces"
+    )
+    assert iso_res["median"] < raw_res["median"]
+    # Monotone: it may tie candidates but must never invert them.
+    for case, tick, last, actions in probe[:40]:
+        from settle.schema.action import DoNothing
+
+        r = Estimator(base, "raw").predict_pairs(case, [DoNothing(), *actions], tick, last)
+        c = Estimator(isotonic, "iso").predict_pairs(case, [DoNothing(), *actions], tick, last)
+        order = np.argsort(r)
+        assert np.all(np.diff(c[order]) >= -1e-12), (
+            "isotonic inverted the ordering, which a monotone map cannot do"
+        )
+
+
+def test_EST_13_the_shipped_model_clears_the_floor():
+    """Whatever ships must be rankable. This is the guard as a gate, not as a
+    diagnostic."""
+    import pickle
+
+    from settle.agent.estimator import (
+        Estimator, has_usable_resolution, latest_model_path, uplift_resolution,
+    )
+
+    path = latest_model_path(REPO_ROOT / "out")
+    if path is None:
+        pytest.skip("no trained model")
+    payload = pickle.loads(path.read_bytes())
+    estimator = Estimator(payload["models"][payload["winner"]], payload["winner"])
+    resolution = uplift_resolution(estimator, _probe_decisions())
+    assert has_usable_resolution(resolution), (
+        f"the shipped model is flat on {resolution['flat_rate']:.1%} of decisions"
+    )
+
+
+def test_EST_13_selection_records_why_a_model_was_rejected():
+    """The decision has to be visible in the artifact, not just in a log line
+    somebody may or may not have read."""
+    import pickle
+
+    from settle.agent.estimator import latest_model_path
+
+    path = latest_model_path(REPO_ROOT / "out")
+    if path is None:
+        pytest.skip("no trained model")
+    payload = pickle.loads(path.read_bytes())
+    selection = payload.get("selection", {})
+    assert "resolution" in selection, "the artifact does not record resolution"
+    assert "rejected_on_resolution" in selection
+    for name, resolution in selection["resolution"].items():
+        assert {"median", "p90", "flat_rate", "n"} <= set(resolution), name
