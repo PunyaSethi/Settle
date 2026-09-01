@@ -15,14 +15,14 @@ reading the file from inside the ASGI `send` callable. Writing the record after
 the 200 means a crash between the two loses the only evidence the event arrived,
 and Razorpay will not send it again once it has a 2XX.
 
-No TestClient
--------------
-`fastapi.testclient.TestClient` needs `httpx`, which this project does not pin.
-Adding an undeclared dependency would make the gate green here and red for
-anyone cloning the repo, so these tests drive the ASGI application directly. It
-is also the more faithful instrument for WBH-5: it can timestamp
-`http.response.start` specifically, which is the moment Razorpay's 5-second
-budget actually stops.
+No TestClient — chosen, not forced
+----------------------------------
+`httpx` is pinned (CP12.1 F9), so `fastapi.testclient.TestClient` is available
+and is deliberately not used. WBH-5 has to measure the moment the response
+*starts*, because that is where Razorpay's five-second budget stops and where
+the background work begins. `TestClient` returns after the whole ASGI call
+completes, background tasks included, so it cannot separate the two. The direct
+caller times `http.response.start` itself.
 """
 
 import asyncio

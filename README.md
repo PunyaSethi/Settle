@@ -126,3 +126,55 @@ Three routes, and exactly three (SPEC §16). `POST /webhooks/razorpay` works;
 
 Use a **domestic** test card (`5267 3181 8797 5449`) — see the decline above for
 what happens otherwise.
+
+## Known limitations
+
+SPEC §19 fixes this as the last section of the finished README. It is opened
+here at CP12.2 with the Razorpay edge's limitations, because they were being
+decided one at a time and needed somewhere to live.
+
+**It is not yet complete.** Six places in SPEC.md and PRIORS.md already say
+"recorded in Known Limitations" against entries that are not below yet: partial
+and reduced debit amounts being out of scope (§5.3), email as a channel (§5.3),
+treating a G9 pre-debit notice as a full contact rather than as regulatory
+overhead exempt from G2 (§12), the TRAI DND transactional-message exemption
+(§12 G11), the G1 / TRAI time-band ambiguity (A98), and one PRIORS row that
+could not be verified. Those are named in their own sections and land here in
+D5. Listing them now is the point: a Known Limitations section that reads as
+complete while six entries are outstanding is worse than none.
+
+### The Razorpay edge
+
+**One payment link per case, ever.** Payment links use
+`reference_id = case_id`, which Razorpay enforces as unique. This gives free
+vendor-side idempotency: a case cannot accidentally receive two links. It also
+means a case that legitimately needs a second link — the first expired, the
+customer asked again — cannot get one. Accepted deliberately; production would
+use `case_id` plus an attempt counter.
+
+**The committed chain covers a projection, not the raw event.** Razorpay's
+checkout SMS-verifies the payer's phone number, so a real payment carries a real
+mobile number and there is no placeholder that completes one. Customer contact
+fields are therefore absent from the projection schema that
+`out/razorpay_demo.json` publishes and hashes. What a reader can verify is that
+the published records hash as claimed and are internally consistent; what they
+cannot verify is that the projection faithfully reflects a raw event they have
+never seen. That gap is real and is the price of not publishing the number. The
+alternative — hashing the raw event and stripping the number afterwards — moves
+the gap somewhere worse, because then *nothing* recomputes. The raw events stay
+on the machine that received them.
+
+**The demo's first payment attempt was declined for an environmental reason.**
+`international_transaction_not_allowed`: the card used was Razorpay's
+international test card and the test account accepts domestic Indian cards only.
+It is kept in the artefact because a real decline alongside a real capture in
+one verifiable chain is worth more than a clean single capture. It is a property
+of the test account and demonstrates nothing about `settle`'s own behaviour in
+either direction — it should not be read as a bug, and equally should not be
+read as evidence that decline handling works.
+
+**The edge is one link, not a load test.** Three webhook deliveries, one case.
+It shows the pipeline terminates in something real. It says nothing about
+throughput, concurrent delivery, or behaviour under Razorpay's retry storm — the
+duplicate-delivery path is covered by WBH-4 in tests and has never been exercised
+by a real retry.

@@ -1,0 +1,46 @@
+# CP12.2 — three loose ends, then charts.
+#
+# F13. plink_TWrboR36RZ13fH cancelled via POST /v1/payment_links/{id}/cancel.
+#      It was created for case_000001 when a second link for case_000000 was
+#      refused, then never paid, and it stayed live after the ngrok URL went
+#      back to the user's Django app. A payment on it would have sent Razorpay
+#      into a 24-hour retry loop against a 404 and then disabled the webhook.
+#      Nothing live remains on the account: one paid link, one cancelled.
+#
+# F14. tests/test_webhook.py's "No TestClient" docstring said httpx was unpinned
+#      after CP12.1's F9 pinned it. The decision was right and the stated reason
+#      had stopped being true, which made a preference read as a constraint. A
+#      comment that contradicts the code is the failure class this project is
+#      about, so it is fixed rather than carried. Discharges the BLOCKED note in
+#      checkpoints/cp12_1.allowlist.
+#
+# F15. Known Limitations opened in README, with the Razorpay edge's entries.
+#
+# No code changed. No test changed. Docstring, docs, and one API call.
+
+tests/test_webhook.py
+README.md
+SPEC.md
+PLAN.md
+checkpoints/cp12_2.allowlist
+
+# --- One thing found while doing F15 ---------------------------------------
+#
+# "Known Limitations" is referenced six times across SPEC.md and PRIORS.md and
+# the section had never been written. Every one of those references has been
+# pointing at nothing since CP2:
+#
+#   SPEC §5.3   partial / reduced debit amounts out of scope
+#   SPEC §5.3   email out of scope as a channel
+#   SPEC §12    G9 notice-as-full-contact, vs. regulatory overhead exempt from G2
+#   SPEC §12    G11's TRAI transactional-message exemption, ASSERTED
+#   SPEC A98    the G1 / TRAI time-band ambiguity
+#   PRIORS:106  one row that could not be verified
+#
+# The section is opened here with the four Razorpay entries F15 asked for, and
+# it states in its own first paragraph that it is incomplete and names all six
+# outstanding items. Writing them properly is D5 work and needs SPEC §12 and
+# PRIORS open, which this allowlist does not permit. The alternative — a Known
+# Limitations section that reads as complete while six entries are missing — is
+# worse than not having one, because a reader takes the absence of an entry as
+# evidence the limitation does not exist.

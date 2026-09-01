@@ -32,7 +32,8 @@ of what shipped, not a retrospective invented after the fact.
 | CP10 | `56144fe` | Fix uplift resolution, OURS beats B2 |
 | CP11 + CP11.1 | `1d27c60` | Sourcing, sensitivity, two fixes the sourcing found |
 | CP12 | `55b6e47` | Razorpay test mode, real at the edges |
-| CP12.1 | this | Self-verifying artefact, then done with Razorpay |
+| CP12.1 | `1444842` | Self-verifying artefact, then done with Razorpay |
+| CP12.2 | this | Three loose ends, then charts |
 
 ## CP12 — Razorpay test mode, real at the edges
 
@@ -91,6 +92,30 @@ Also closed here:
   read as our bug.
 
 The payment was not redone. The existing one stands.
+
+## CP12.2 — three loose ends, then charts
+
+No code changed. A docstring, the docs, and one API call.
+
+- `plink_TWrboR36RZ13fH` cancelled (F13). It was raised for `case_000001` when
+  Razorpay refused a second link for `case_000000`, never paid, and still live
+  after the tunnel went back to an unrelated app — a payment on it would have
+  put Razorpay into a 24-hour retry loop against a 404 and then disabled the
+  webhook. One paid link and one cancelled link remain; nothing is live.
+- `tests/test_webhook.py`'s "No TestClient" docstring corrected (F14). It
+  claimed httpx was unpinned after CP12.1 pinned it, which made a preference
+  read as a constraint. Discharges CP12.1's BLOCKED note.
+- Known Limitations opened in README (F15): one link per case from
+  `reference_id = case_id`, the projection scope and what it does and does not
+  let a reader verify, the international-card decline as an account property
+  rather than our behaviour, and the edge being one link rather than a load
+  test.
+
+Found while doing F15: "Known Limitations" is referenced six times across
+SPEC.md and PRIORS.md and had never been written — every reference has pointed
+at nothing since CP2. The section now exists, and its first paragraph names all
+six outstanding entries rather than implying the four present ones are the whole
+list. Writing them needs SPEC §12 and PRIORS open; that is D5.
 
 Razorpay is done. Next is D5: README §19 order, the three-screen viewer, the
 voice clips.
