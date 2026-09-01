@@ -1,4 +1,11 @@
-"""CP12 — the Razorpay client. SPEC §16.
+"""CP12 / CP12.1 — the Razorpay client and the committed artefact. SPEC §16.
+
+RZP-4 (CP12.1) is the one that carries the artefact. `out/razorpay_demo.json`
+publishes a hash chain over a contact-free *projection* of each webhook, and
+this test is a reader recomputing it. The alternative — hash the raw event, strip
+the payer's phone, publish both — produces a hash nobody can check, which is the
+"trust me, it verified before I edited it" claim this project exists to refuse.
+
 
 RZP-1 is the labelling discipline: the default path mints synthetic records, and
 a synthetic record can never wear a real record's label. This is the one idea
@@ -406,3 +413,142 @@ def test_RZP_3_the_client_is_the_only_module_importing_the_sdk() -> None:
         assert "sys.modules[\"razorpay\"" not in source, relative
         assert "import_module(\"razorpay" not in source, relative
         assert "__import__(\"razorpay" not in source, relative
+
+
+# --------------------------------------------------------------------------
+# RZP-4 — the committed artefact self-verifies
+# --------------------------------------------------------------------------
+
+ARTEFACT = REPO_ROOT / "out" / "razorpay_demo.json"
+
+# Razorpay puts a customer's identity in these. None of them may appear as a key
+# anywhere inside a published projection. The list is duplicated from
+# `scripts/razorpay_demo.py` on purpose: a test that imports the constant it is
+# checking would pass whatever the script decided to exclude, including nothing.
+CONTACT_KEYS = frozenset(
+    {"contact", "email", "customer_id", "customer", "card", "card_id", "vpa",
+     "token_id", "bank", "name", "phone", "notes_contact"}
+)
+
+
+def _keys_anywhere(obj, path: str = "") -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            found.append((key, path))
+            found.extend(_keys_anywhere(value, f"{path}.{key}"))
+    elif isinstance(obj, list):
+        for index, value in enumerate(obj):
+            found.extend(_keys_anywhere(value, f"{path}[{index}]"))
+    return found
+
+
+@pytest.mark.skipif(not ARTEFACT.exists(), reason="out/razorpay_demo.json not generated")
+def test_RZP_4_every_hash_in_the_artefact_recomputes_from_the_committed_projection() -> None:
+    """The artefact's whole value. SPEC §16.
+
+    A hash computed over content a reader cannot see, published beside content
+    they can, is not evidence — it reduces to "trust me, it verified before I
+    edited it". That is precisely the claim about payment outcomes this project
+    exists to refuse, so making it about our own integrity would be
+    self-refuting. The chain is therefore defined over the projection that is
+    published, and this test is a reader recomputing it.
+    """
+    import hashlib
+
+    from settle.audit.chain import GENESIS_HASH
+    from settle.schema.canonical import canonical_json
+
+    artefact = json.loads(ARTEFACT.read_text(encoding="utf-8"))
+    chain = artefact["chain"]
+    assert chain, "the artefact publishes no chain"
+
+    prev = GENESIS_HASH
+    for row in chain:
+        seq = row["projection"]["ledger_seq"]
+        assert row["prev_hash"] == prev, f"row {seq} does not link to the row before it"
+        recomputed = hashlib.sha256(
+            prev.encode("ascii") + canonical_json(row["projection"])
+        ).hexdigest()
+        assert recomputed == row["hash"], (
+            f"row {seq}: the published hash does not recompute from the published "
+            f"projection. The artefact is not self-verifying."
+        )
+        prev = row["hash"]
+
+    assert prev == artefact["chain_head"]
+
+    # Not vacuous: altering one published byte must break the chain. Without
+    # this, a chain over a constant would pass.
+    tampered = json.loads(json.dumps(chain[0]["projection"]))
+    tampered["entities"]["payment"]["amount"] += 1
+    assert (
+        hashlib.sha256(GENESIS_HASH.encode("ascii") + canonical_json(tampered)).hexdigest()
+        != chain[0]["hash"]
+    )
+
+
+@pytest.mark.skipif(not ARTEFACT.exists(), reason="out/razorpay_demo.json not generated")
+def test_RZP_4_no_customer_contact_field_appears_in_a_published_projection() -> None:
+    """Excluded by construction, not blanked or masked.
+
+    The projection is built from an allow-list of field names, so a contact
+    field cannot arrive by Razorpay adding one. This asserts the outcome of that
+    design against the file that actually ships.
+    """
+    artefact = json.loads(ARTEFACT.read_text(encoding="utf-8"))
+
+    offenders = [
+        f"{path}.{key}"
+        for row in artefact["chain"]
+        for key, path in _keys_anywhere(row["projection"])
+        if key in CONTACT_KEYS
+    ]
+    assert not offenders, offenders
+
+    # Absent from the schema, not present-and-empty. A blanked field is still a
+    # field, and the next person to fill it in gets no warning.
+    rendered = json.dumps(artefact["chain"])
+    for masked in ("[REDACTED", "XXXX", "***", "REDACTED"):
+        assert masked not in rendered, (
+            f"{masked!r} in a projection means a field was blanked rather than "
+            "excluded — the schema should not have it at all"
+        )
+
+    # And the artefact says so in those terms, so a reader is not left to infer
+    # it from the absence of something.
+    scope = artefact["scope_of_the_chain"]
+    assert "projection" in scope["covers"]
+    assert "raw webhook event" in scope["does_not_cover"]
+    assert set(CONTACT_KEYS) >= set(scope["excluded_fields"])
+
+
+@pytest.mark.skipif(not ARTEFACT.exists(), reason="out/razorpay_demo.json not generated")
+def test_RZP_4_the_artefact_keeps_the_failed_payment() -> None:
+    """A real decline and a real capture in one verifiable chain.
+
+    Dropping the declined attempt would leave a tidier artefact that proved
+    less. The decline is Razorpay refusing an international test card on a
+    domestic-only account — a property of the test account, not a defect — and
+    the artefact says so rather than leaving it to be misread.
+    """
+    artefact = json.loads(ARTEFACT.read_text(encoding="utf-8"))
+    events = [row["projection"]["event"] for row in artefact["chain"]]
+    assert "payment.failed" in events
+    assert "payment.captured" in events
+    assert "payment_link.paid" in events
+
+    assert artefact["razorpay_ids"]["failed_payment_ids"], "the declined attempt was dropped"
+    assert artefact["razorpay_ids"]["payment_id"], "no captured payment id"
+    assert (
+        artefact["razorpay_ids"]["payment_id"]
+        not in artefact["razorpay_ids"]["failed_payment_ids"]
+    ), "the failed payment is being reported as the captured one"
+
+    assert "international_transaction_not_allowed" in artefact["outcome"]["note"]
+    assert artefact["outcome"]["payment_link_status"] == "paid"
+
+    # Every published id is a real test-mode object, and labelled as one.
+    assert artefact["payment_link_as_created"]["source"] == "RAZORPAY_TEST_MODE"
+    assert artefact["razorpay_ids"]["payment_link_id"].startswith("plink_")
+    assert artefact["razorpay_ids"]["payment_id"].startswith("pay_")

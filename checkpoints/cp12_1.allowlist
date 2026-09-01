@@ -1,0 +1,79 @@
+# CP12.1 — self-verifying artefact, then done with Razorpay.
+#
+# CP12's artefact had one real weakness: it published hashes computed over an
+# unredacted event beside a payload with the payer's phone number removed. A
+# reader could not recompute those hashes. That is "trust me, it verified before
+# I edited it", which is the claim about payment outcomes this project exists to
+# refuse — so an artefact making it about its own integrity was self-refuting.
+#
+# Fixed by moving the published chain onto a contact-free PROJECTION. Contact
+# fields are absent from the projection's schema rather than blanked, the
+# projection is built from an allow-list so the next field Razorpay adds cannot
+# arrive by default, and the hash covers exactly what is committed. RZP-4 is a
+# reader recomputing it, and it is the artefact's whole value.
+#
+# Razorpay's checkout SMS-verifies the contact number, so a placeholder cannot
+# complete a payment. The CP12 payment stands; it was not redone.
+
+scripts/razorpay_demo.py
+out/razorpay_demo.json
+out/audit_edge.jsonl
+.gitignore
+requirements.txt
+PLAN.md
+README.md
+SPEC.md
+tests/test_razorpay.py
+checkpoints/cp12_1.allowlist
+
+# --- Notes on two allowlist entries ----------------------------------------
+#
+# `out/audit_edge.jsonl` is listed and is deliberately NOT committed. It holds
+# the raw webhook events, contact fields included, and `out/*` keeps it
+# gitignored. It stays on the machine that received it. Listing it authorises it
+# to change without tripping the gate; it does not make it a deliverable.
+#
+# `out/razorpay_demo.json` is gitignored by `out/*` and needs `git add -f`, the
+# same as at CP12.
+
+# --- BLOCKED: one file outside this allowlist has to change ----------------
+#
+# `tests/test_webhook.py` now contains a false statement, and this checkpoint
+# caused it. Its module docstring says:
+#
+#     `fastapi.testclient.TestClient` needs `httpx`, which this project does not
+#     pin. Adding an undeclared dependency would make the gate green here and
+#     red for anyone cloning the repo, so these tests drive the ASGI application
+#     directly.
+#
+# F9 pinned `httpx==0.28.1`, so the first clause is now wrong and the reasoning
+# reads as a constraint that no longer exists. The decision itself is unchanged
+# and correct — the direct ASGI caller is the better instrument, because only it
+# can timestamp `http.response.start`, which is where Razorpay's five-second
+# budget actually stops, and `TestClient` cannot see that moment at all. What is
+# stale is the justification, which now claims the choice was forced when it is
+# in fact preferred.
+#
+# The fix is to replace that paragraph with:
+#
+#   -No TestClient
+#   ------------------
+#   -`fastapi.testclient.TestClient` needs `httpx`, which this project does not
+#   -pin. Adding an undeclared dependency would make the gate green here and red
+#   -for anyone cloning the repo, so these tests drive the ASGI application
+#   -directly. It is also the more faithful instrument for WBH-5: it can
+#   -timestamp `http.response.start` specifically, which is the moment
+#   -Razorpay's 5-second budget actually stops.
+#   +No TestClient — chosen, not forced
+#   +----------------------------------
+#   +`httpx` is pinned (CP12.1 F9), so `fastapi.testclient.TestClient` is
+#   +available and is deliberately not used. WBH-5 has to measure the moment the
+#   +response *starts*, because that is where Razorpay's five-second budget
+#   +stops and where the background work begins. `TestClient` returns after the
+#   +whole ASGI call completes, background tasks included, so it cannot separate
+#   +the two. The direct caller times `http.response.start` itself.
+#
+# Recorded rather than applied: `tests/test_webhook.py` is not on this
+# allowlist, and a stale comment is not worth taking a file CC may not touch.
+# Punya's call. SPEC's F9 amendment note carries the correct reasoning meanwhile,
+# so the repo is not left with only the wrong version of it.

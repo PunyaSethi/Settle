@@ -19,6 +19,15 @@ venv/
 out/*
 !out/charts/
 
+# The raw Razorpay webhook events stay on the machine that received them.
+# Razorpay's checkout SMS-verifies the payer's phone number, so a real payment
+# carries a real mobile number. out/razorpay_demo.json publishes a contact-free
+# projection instead, and the hash chain is defined over that projection — see
+# scripts/razorpay_demo.py. These two lines are redundant with `out/*` today and
+# are here so the intent survives anyone adding an `!out/...` negation later.
+out/razorpay_raw*.json
+out/razorpay_demo_state.json
+
 # tooling
 .pytest_cache/
 .ipynb_checkpoints/

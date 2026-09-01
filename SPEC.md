@@ -1283,6 +1283,14 @@ Real at the edges, simulated at scale.
   id, and that row carries a `delivery_count`: a replay is counted, not
   discarded, mirroring `ReportedOutcome.arrival_count` in §5.5. Exactly one
   delivery is allowed to cause work.
+
+  **The ledger records every delivery; the store records the event once.** These
+  are deliberately different, and "recorded once" means the second. A replay
+  appends its own entry under `WEBHOOK_REPLAY` while the store's single row has
+  its count incremented and nothing is dispatched. Suppressing the second ledger
+  entry would make a duplicate arrival invisible, and a duplicate arriving is a
+  fact about the world — it is the exact condition §7's auditor claims to
+  detect, so the system cannot be blind to it in its own inbox.
 - Edge traffic writes to its own ledger under arm `EDGE`, not into a per-arm
   evaluation ledger. The evaluation's ledgers replay from a seed; interleaving
   live traffic into one would make it neither replayable nor live.
@@ -1291,7 +1299,32 @@ Real at the edges, simulated at scale.
   dashboard and the code disagree, and the ledger is where that becomes visible.
 - Demo shows one real `pay_...` / `plink_...` id next to its ledger row,
   committed to `out/razorpay_demo.json` so the artefact survives ngrok going
-  away.
+  away. `scripts/razorpay_demo.py` is the entry point, mock by default.
+
+**The committed artefact is self-verifying, and its chain covers a projection.**
+Razorpay's checkout SMS-verifies the payer's phone number, so a real payment
+carries a real mobile number and there is no placeholder that can complete one.
+That number is not published.
+
+The rejected fix was to hash the raw event and strip the number before
+committing. A hash computed over content the reader cannot see, published beside
+content they can, is not evidence — it reduces to "trust me, it verified before I
+edited it", which is the claim about payment outcomes this whole project exists
+to refuse. An artefact making that claim about its own integrity would be
+self-refuting.
+
+So the published chain is defined over a **contact-free projection** built from a
+fixed allow-list of fields: ids, statuses, amounts, method, order id, payment
+link id, notes, timestamps, event id, delivery count, signature verification.
+Customer contact fields are absent from that schema — not blanked, not masked,
+with no branch that admits them, and an allow-list rather than a deny-list so the
+next field Razorpay adds cannot arrive by default. The hash covers the
+projection, the projection is what is committed, and a reader recomputes over
+exactly the bytes in front of them with `settle.schema.canonical`.
+
+This is a stated scope, not a redaction. The chain covers the projection; it does
+not cover the raw event, which stays on the machine that received it in
+`out/razorpay_raw*.json`, gitignored. Test RZP-4.
 
 **Real vs synthetic, enforced by the type.** Every payment link record carries an
 explicit `source`: `RAZORPAY_TEST_MODE` for an object that exists in Razorpay's
@@ -1385,7 +1418,10 @@ database.
   stops and asks
 - No commits until explicitly approved
 - CC writes a CHECKPOINT_REPORT at the end of each checkpoint
-- PLAN.md is edited by CC only, via targeted str_replace
+- PLAN.md is edited by CC only, via targeted str_replace. **PLAN.md belongs on
+  every allowlist by default.** It was absent from every one of them from CP4 to
+  CP12, so the file CC owns was the file CC was never permitted to touch, and it
+  sat at `(pending)` for nine checkpoints. Added at CP12.1.
 
 ## 19. README order — fixed
 
@@ -1660,3 +1696,8 @@ Resolved:
 - 2026-09-01 — A103: §16 — the raw event is on disk before the response starts, INV-5's write-ahead ordering applied to the edge. Edge traffic writes to its own ledger under arm `EDGE` rather than into a per-arm evaluation ledger. Test WBH-6.
 - 2026-09-01 — A104: §16 — real-vs-synthetic labelling made a validated property of the record rather than a convention: `source` is `RAZORPAY_TEST_MODE` or `MOCK_SANDBOX`, mock ids carry a `MOCK_plink_` prefix, mock URLs sit on the reserved `.invalid` TLD, and the pairing is enforced by the model. `RAZORPAY_MOCK_MODE` defaults to true so the repo runs without credentials; live keys are refused. Tests RZP-1, RZP-2.
 - 2026-09-01 — A105: §16 — the route table is fixed at exactly three, and a declared-but-unbuilt route returns 501 rather than 404.
+- 2026-09-01 — A106: §16 — the committed artefact's hash chain is defined over a contact-free projection rather than over the raw webhook event, because Razorpay's checkout SMS-verifies the payer's number and a hash over unpublished content cannot be recomputed by a reader. Stated scope, not redaction: contact fields are absent from the projection schema, built from an allow-list. Raw events stay local and gitignored. Test RZP-4.
+- 2026-09-01 — A107: §16 — the ledger records every webhook delivery while the idempotency store records the event once. Recorded explicitly so WBH-4's "recorded once" reads as the deliberate interpretation it is: suppressing the replay entry would blind the system to the duplicate-arrival condition §7 claims to detect.
+- 2026-09-01 — A108: §16 — `scripts/razorpay_demo.py` named as the demo entry point, mock by default so a clone with no credentials runs.
+- 2026-09-01 — A109: §18 — PLAN.md belongs on every allowlist by default. It was on none from CP4 to CP12, so the one file CC owns was the one file CC could never edit, and it sat at `(pending)` for nine checkpoints.
+- 2026-09-01 — F9: `requirements.txt` — `httpx==0.28.1` pinned. The webhook tests keep driving the ASGI app directly rather than switching to `TestClient`: only the direct caller can timestamp `http.response.start`, which is where Razorpay's 5-second budget actually stops.

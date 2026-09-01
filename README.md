@@ -34,25 +34,50 @@ delivered through a real tunnel. Nothing about it is replayed from a fixture.
 
 It took two attempts, and the first one failing is the more useful half. Razorpay
 declined it with `international_transaction_not_allowed` and reported that back
-as a real `payment.failed` webhook (`pay_TWrJELO1R1PGeA`) — a genuine failed
-payment, verified and written to the ledger like any other event, rather than a
-happy path with the failures edited out.
+as a real `payment.failed` webhook (`pay_TWrJELO1R1PGeA`). To be clear about
+whose fault that is: the card used was Razorpay's *international* test card and
+this test account accepts domestic Indian cards only. It is a property of the
+account, not a defect in `settle` — and a real decline and a real capture in one
+verifiable chain is worth more than a clean single capture with the failures
+edited out.
 
-The webhook that reported it was verified by HMAC SHA256 before its body was
-parsed, checked against an event-id idempotency store, and written to a
-hash-chained ledger — the same `LedgerEntry` chain (SPEC §5.6) the simulated
-runs write to, and it verifies with the same `python -m settle.audit.verify`.
-The full trace, including the raw event and the ledger row with its hashes, is
-in `out/razorpay_demo.json`.
+Each webhook was verified by HMAC SHA256 **before its body was parsed**, checked
+against an event-id idempotency store, and written to a hash-chained ledger — the
+same `LedgerEntry` chain (SPEC §5.6) the simulated runs write to.
 
-One field in that file is redacted, and it is worth being explicit about the
-cost. Razorpay's checkout autofilled the account holder's real mobile number, so
-`contact` is removed from the committed events. The `hash` and `prev_hash`
-values were computed over the event as received, *before* that removal — so
-recomputing a hash from the payload as printed will not match, and the artefact
-says so in its own `redaction` block. The unredacted chain verifies on the
-machine that received it. Every Razorpay id is left verbatim: they are test-mode
-objects and safe to publish.
+### The artefact verifies itself, over a stated scope
+
+`out/razorpay_demo.json` publishes a hash chain you can recompute. For each row:
+
+```
+sha256(prev_hash.encode("ascii") + canonical_json(projection)).hexdigest() == hash
+```
+
+with `canonical_json` from `settle.schema.canonical` and the first `prev_hash`
+being 64 zeros. Test `RZP-4` is exactly that recomputation, and it is the
+artefact's whole value.
+
+**What the chain covers is a projection of each webhook, not the raw event.**
+Razorpay's checkout SMS-verifies the payer's phone number, so a real payment
+carries a real mobile number and no placeholder can complete one. That number is
+not published.
+
+The obvious alternative was to hash the raw event and strip the number before
+committing. That is the one thing this artefact must not do. A hash computed over
+content the reader cannot see, published beside content they can, is not
+evidence — it collapses to *"trust me, it verified before I edited it"*, which is
+precisely the claim about payment outcomes this project exists to refuse. Making
+it about our own integrity would be self-refuting.
+
+So the projection is built from a fixed allow-list of fields — ids, statuses,
+amounts, method, order id, payment link id, notes, timestamps, event id, delivery
+count, signature verification. Customer contact fields are **absent from that
+schema**: not blanked, not masked, with no branch that admits them, and an
+allow-list rather than a deny-list so that the next field Razorpay adds cannot
+arrive by default. This is a stated scope, not a redaction. The raw events stay
+on the machine that received them, in `out/razorpay_raw*.json`, gitignored.
+
+Every Razorpay id is published verbatim: they are test-mode objects and safe.
 
 The point is narrow and worth stating plainly: it demonstrates that the pipeline
 terminates in something real, and nothing more. It is not evidence that the
@@ -76,10 +101,13 @@ mistake is a demo that shows a synthetic id and calls it a payment.
 
 ### Running it without credentials
 
-`RAZORPAY_MOCK_MODE` defaults to **true**, so cloning this repo and running it
-with no `.env` gives you a working demo that mints `MOCK_SANDBOX` records. The
-opposite default is the dangerous one: a missing key that quietly produces a
-plausible-looking id.
+```
+python scripts/razorpay_demo.py
+```
+
+`RAZORPAY_MOCK_MODE` defaults to **true**, so that command works in a fresh
+clone with no `.env` and mints a `MOCK_SANDBOX` record. The opposite default is
+the dangerous one: a missing key that quietly produces a plausible-looking id.
 
 To run against real test mode, put `RAZORPAY_KEY_ID` (must start `rzp_test_`),
 `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` in `.env` and set
@@ -87,8 +115,14 @@ To run against real test mode, put `RAZORPAY_KEY_ID` (must start `rzp_test_`),
 path, and this project moves no money.
 
 ```
-uvicorn settle.api.app:app --port 8002
+uvicorn settle.api.app:app --port 8002        # the receiver
+python scripts/razorpay_demo.py link          # create a link
+python scripts/razorpay_demo.py wait          # poll for the webhook
+python scripts/razorpay_demo.py finish        # write out/razorpay_demo.json
 ```
 
 Three routes, and exactly three (SPEC §16). `POST /webhooks/razorpay` works;
 `POST /voice/extract` and `GET /` are declared and return 501 until D5.
+
+Use a **domestic** test card (`5267 3181 8797 5449`) — see the decline above for
+what happens otherwise.

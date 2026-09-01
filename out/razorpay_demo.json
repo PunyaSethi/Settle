@@ -1,8 +1,27 @@
 {
-  "checkpoint": "CP12",
+  "checkpoint": "CP12.1",
   "title": "Simulated at scale, real at the edges",
-  "written_at": "2026-09-01T17:47:07.308573+00:00",
-  "claim": "The 10,000-case batch is synthetic. The payment link and the webhook below are real Razorpay test-mode objects, created and delivered over the network, verified by HMAC SHA256, and written to the hash-chained ledger. Nothing here is replayed from a fixture.",
+  "written_at": "2026-09-01T18:09:34.706424+00:00",
+  "claim": "The 10,000-case batch is synthetic. The payment link and the webhooks below are real Razorpay test-mode objects, created and delivered over the network, verified by HMAC SHA256 and written to the hash-chained ledger. Nothing here is replayed from a fixture.",
+  "scope_of_the_chain": {
+    "covers": "the projection published in this file, and nothing else",
+    "does_not_cover": "the raw webhook event, which is not published",
+    "why": "Razorpay's checkout SMS-verifies the payer's phone number, so a real payment carries a real mobile number and no placeholder can complete one. Customer contact fields are therefore excluded from the projection by construction \u2014 not blanked, not masked, absent from the schema, with no branch that admits them. This is a stated scope, not a redaction: hashing a raw event and then editing it before publishing would produce a hash no reader could recompute, which is the 'trust me, it verified before I changed it' claim this project exists to refuse.",
+    "excluded_fields": [
+      "contact",
+      "email",
+      "customer_id",
+      "customer",
+      "card",
+      "card_id",
+      "vpa",
+      "token_id",
+      "bank"
+    ],
+    "exclusion_applies_to": "chain[*].projection \u2014 the Razorpay-sourced records. The `case` block above is the synthetic batch case and its `customer_id` (cust_000000) is a simulator identifier for a person who does not exist, so it is not customer contact data and is not excluded.",
+    "verify": "For each row of `chain`: sha256(prev_hash.encode('ascii') + canonical_json(projection)).hexdigest() == hash, with canonical_json from settle.schema.canonical. prev_hash of the first row is 64 zeros. Test RZP-4 does exactly this.",
+    "raw_body_sha256_note": "Each projection carries raw_body_sha256, the digest of the raw signed bytes. It is inside the projection so the chain covers it, but it is a claim about a local file rather than something a reader can check \u2014 the raw event stays in out/razorpay_raw.json, which is gitignored."
+  },
   "case": {
     "case_id": "case_000000",
     "created_at": "2026-01-15T19:00:00Z",
@@ -23,7 +42,7 @@
     "dnd_flag": false,
     "language": "hinglish"
   },
-  "payment_link": {
+  "payment_link_as_created": {
     "id": "plink_TWr7e2EFJ8ITvn",
     "short_url": "https://rzp.io/rzp/ZENgoZB",
     "amount_paise": 325635,
@@ -51,371 +70,180 @@
     "payment_link_status": "paid",
     "amount_paid_paise": 325635,
     "payment_attempts": 2,
-    "note": "Two attempts. The first was declined by Razorpay with international_transaction_not_allowed and arrived as a real payment.failed; the second was captured. `payment_link.status` inside `payment_link` above is 'created' because that is the record as minted \u2014 the link's final state is here."
+    "note": "Two attempts, and the failed one is kept deliberately. The first was declined by Razorpay with international_transaction_not_allowed \u2014 the test card used was Razorpay's international one and this account accepts domestic Indian cards only. That is a property of the test account, not a defect in settle. It arrived as a real payment.failed webhook, verified and chained like any other event. A real decline and a real capture in one verifiable chain is worth more than a clean single capture."
   },
-  "webhook_deliveries": [
+  "chain": [
     {
-      "ledger_seq": 0,
-      "reason_code": "WEBHOOK_RECEIVED",
-      "event": "payment.failed",
-      "event_id": "TWrJFQxJGhIiMY",
-      "delivery_count": 1,
-      "signature_verified": true,
-      "body_sha256": "b9fdca2d7acb8919746164a28185de3cdedea72d940fbecaf6a9858fc7880bd3"
-    },
-    {
-      "ledger_seq": 1,
-      "reason_code": "WEBHOOK_RECEIVED",
-      "event": "payment.captured",
-      "event_id": "TWrMQsZY7zwrJg",
-      "delivery_count": 1,
-      "signature_verified": true,
-      "body_sha256": "0e6f384aff9d4085d6748907450ae25619d116abe52f28ae87ffb108d7f30185"
-    },
-    {
-      "ledger_seq": 2,
-      "reason_code": "WEBHOOK_RECEIVED",
-      "event": "payment_link.paid",
-      "event_id": "TWrMRvZupipOXq",
-      "delivery_count": 1,
-      "signature_verified": true,
-      "body_sha256": "12953343244b1c74c7c8e74cbc4d25082928f674374c03529ff34c6a0aa294cf"
-    }
-  ],
-  "ledger_rows": [
-    {
-      "seq": 0,
-      "case_id": "case_000000",
-      "at": "2026-09-01T17:42:12.392008Z",
-      "kind": "event",
-      "actor": "system",
-      "payload": {
-        "event": {
-          "entity": "event",
-          "account_id": "acc_TWRO6cLRL6kaE7",
-          "event": "payment.failed",
-          "contains": [
-            "payment"
-          ],
-          "payload": {
-            "payment": {
-              "entity": {
-                "id": "pay_TWrJELO1R1PGeA",
-                "entity": "payment",
-                "amount": 325635,
-                "currency": "INR",
-                "status": "failed",
-                "order_id": "order_TWr8cmMDYa9lph",
-                "international": true,
-                "method": "card",
-                "amount_refunded": 0,
-                "refund_status": null,
-                "captured": false,
-                "description": "#TWr7e2EFJ8ITvn",
-                "card_id": "card_TWrJEdHPu464k3",
-                "card": {
-                  "id": "card_TWrJEdHPu464k3",
-                  "entity": "card",
-                  "name": "Punya Sethi",
-                  "last4": "1111",
-                  "network": "Visa",
-                  "type": "debit",
-                  "issuer": null,
-                  "international": true,
-                  "emi": false,
-                  "sub_type": "consumer",
-                  "token_iin": "411111111"
-                },
-                "email": "demo@example.com",
-                "contact": "[REDACTED \u2014 payer phone number]",
-                "token_id": "token_TWrJEyVGUNI3aQ",
-                "notes": {
-                  "rail": "card",
-                  "source": "settle CP12",
-                  "case_id": "case_000000",
-                  "decline_code": "insufficient_funds",
-                  "attempt_number": "1"
-                },
-                "fee": null,
-                "tax": null,
-                "error_code": "BAD_REQUEST_ERROR",
-                "error_description": "Your payment could not be completed as this business accepts domestic (Indian) card payments only. Try another payment method.",
-                "error_source": "business",
-                "error_step": "payment_initiation",
-                "error_reason": "international_transaction_not_allowed",
-                "acquirer_data": {
-                  "auth_code": null
-                },
-                "created_at": 1788284531
-              }
-            }
-          },
-          "created_at": 1788284531
-        },
+      "projection": {
+        "ledger_seq": 0,
+        "case_id": "case_000000",
+        "at": "2026-09-01T17:42:12.392008+00:00",
+        "arm": "EDGE",
+        "kind": "event",
+        "actor": "system",
+        "reason_code": "WEBHOOK_RECEIVED",
+        "event": "payment.failed",
         "event_id": "TWrJFQxJGhIiMY",
-        "body_sha256": "b9fdca2d7acb8919746164a28185de3cdedea72d940fbecaf6a9858fc7880bd3",
+        "event_created_at": 1788284531,
+        "account_id": "acc_TWRO6cLRL6kaE7",
         "delivery_count": 1,
         "subscribed": true,
         "signature_verified": true,
-        "source": "RAZORPAY_TEST_MODE"
-      },
-      "reason_code": "WEBHOOK_RECEIVED",
-      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
-      "hash": "70b1465799d4e9ce7ba4e7871cd683f03f818567d067b7e7b984ec540dae4557",
-      "arm": "EDGE"
-    },
-    {
-      "seq": 1,
-      "case_id": "case_000000",
-      "at": "2026-09-01T17:45:13.092602Z",
-      "kind": "event",
-      "actor": "system",
-      "payload": {
-        "event": {
-          "entity": "event",
-          "account_id": "acc_TWRO6cLRL6kaE7",
-          "event": "payment.captured",
-          "contains": [
-            "payment"
-          ],
-          "payload": {
-            "payment": {
-              "entity": {
-                "id": "pay_TWrM4OohnxgMOu",
-                "entity": "payment",
-                "amount": 325635,
-                "currency": "INR",
-                "status": "captured",
-                "order_id": "order_TWr8cmMDYa9lph",
-                "invoice_id": null,
-                "international": false,
-                "method": "card",
-                "amount_refunded": 0,
-                "refund_status": null,
-                "captured": true,
-                "description": "#TWr7e2EFJ8ITvn",
-                "card_id": "card_TWrM4gizIvnmi4",
-                "card": {
-                  "id": "card_TWrM4gizIvnmi4",
-                  "entity": "card",
-                  "name": "",
-                  "last4": "5449",
-                  "network": "MasterCard",
-                  "type": "credit",
-                  "issuer": "UTIB",
-                  "international": false,
-                  "emi": false,
-                  "sub_type": "consumer",
-                  "token_iin": "526731818"
-                },
-                "bank": null,
-                "wallet": null,
-                "vpa": null,
-                "email": "void@razorpay.com",
-                "contact": "[REDACTED \u2014 payer phone number]",
-                "token_id": "token_TWrM59BguSjKB5",
-                "notes": {
-                  "rail": "card",
-                  "source": "settle CP12",
-                  "case_id": "case_000000",
-                  "decline_code": "insufficient_funds",
-                  "attempt_number": "1"
-                },
-                "fee": 8455,
-                "tax": 1290,
-                "error_code": null,
-                "error_description": null,
-                "error_source": null,
-                "error_step": null,
-                "error_reason": null,
-                "acquirer_data": {
-                  "auth_code": "841692"
-                },
-                "created_at": 1788284693,
-                "reward": null,
-                "base_amount": 325635
-              }
-            }
-          },
-          "created_at": 1788284712
-        },
-        "event_id": "TWrMQsZY7zwrJg",
-        "body_sha256": "0e6f384aff9d4085d6748907450ae25619d116abe52f28ae87ffb108d7f30185",
-        "delivery_count": 1,
-        "subscribed": true,
-        "signature_verified": true,
-        "source": "RAZORPAY_TEST_MODE"
-      },
-      "reason_code": "WEBHOOK_RECEIVED",
-      "prev_hash": "70b1465799d4e9ce7ba4e7871cd683f03f818567d067b7e7b984ec540dae4557",
-      "hash": "aa8d08e9802eae6eaeea971f21b87684ab727a9632d49c29a3389cc4384f7bac",
-      "arm": "EDGE"
-    },
-    {
-      "seq": 2,
-      "case_id": "case_000000",
-      "at": "2026-09-01T17:45:14.033048Z",
-      "kind": "event",
-      "actor": "system",
-      "payload": {
-        "event": {
-          "account_id": "acc_TWRO6cLRL6kaE7",
-          "contains": [
-            "payment_link",
-            "order",
-            "payment"
-          ],
-          "created_at": 1788283873,
-          "entity": "event",
-          "event": "payment_link.paid",
-          "payload": {
-            "order": {
-              "entity": {
-                "amount": 325635,
-                "amount_due": 0,
-                "amount_paid": 325635,
-                "attempts": 2,
-                "checkout": null,
-                "created_at": 1788283928,
-                "currency": "INR",
-                "description": null,
-                "entity": "order",
-                "id": "order_TWr8cmMDYa9lph",
-                "notes": {
-                  "attempt_number": "1",
-                  "case_id": "case_000000",
-                  "decline_code": "insufficient_funds",
-                  "rail": "card",
-                  "source": "settle CP12"
-                },
-                "offer_id": null,
-                "receipt": "case_000000",
-                "status": "paid"
-              }
-            },
-            "payment": {
-              "entity": {
-                "acquirer_data": {
-                  "auth_code": "841692"
-                },
-                "amount": 325635,
-                "amount_refunded": 0,
-                "amount_transferred": 0,
-                "bank": null,
-                "base_amount": 325635,
-                "captured": true,
-                "card": {
-                  "emi": false,
-                  "entity": "card",
-                  "id": "card_TWrM4gizIvnmi4",
-                  "international": false,
-                  "issuer": "UTIB",
-                  "last4": "5449",
-                  "name": "",
-                  "network": "MasterCard",
-                  "sub_type": "consumer",
-                  "token_iin": "526731818",
-                  "type": "credit"
-                },
-                "card_id": "card_TWrM4gizIvnmi4",
-                "contact": "[REDACTED \u2014 payer phone number]",
-                "created_at": 1788284693,
-                "currency": "INR",
-                "description": "#TWr7e2EFJ8ITvn",
-                "email": "void@razorpay.com",
-                "entity": "payment",
-                "error_code": null,
-                "error_description": null,
-                "error_reason": null,
-                "error_source": null,
-                "error_step": null,
-                "fee": 8455,
-                "fee_bearer": "platform",
-                "id": "pay_TWrM4OohnxgMOu",
-                "international": false,
-                "invoice_id": null,
-                "method": "card",
-                "notes": {
-                  "attempt_number": "1",
-                  "case_id": "case_000000",
-                  "decline_code": "insufficient_funds",
-                  "rail": "card",
-                  "source": "settle CP12"
-                },
-                "order_id": "order_TWr8cmMDYa9lph",
-                "refund_status": null,
-                "status": "captured",
-                "tax": 1290,
-                "token_id": "token_TWrM59BguSjKB5",
-                "vpa": null,
-                "wallet": null
-              }
-            },
-            "payment_link": {
-              "entity": {
-                "accept_partial": false,
-                "allow_full_payment": false,
-                "amount": 325635,
-                "amount_paid": 325635,
-                "cancelled_at": 0,
-                "created_at": 1788283873,
-                "currency": "INR",
-                "customer": {},
-                "description": "settle recovery \u2014 case_000000 (insufficient_funds)",
-                "expire_by": 0,
-                "expired_at": 0,
-                "first_min_partial_amount": 0,
-                "id": "plink_TWr7e2EFJ8ITvn",
-                "notes": {
-                  "attempt_number": "1",
-                  "case_id": "case_000000",
-                  "decline_code": "insufficient_funds",
-                  "rail": "card",
-                  "source": "settle CP12"
-                },
-                "notify": {
-                  "email": false,
-                  "sms": false,
-                  "whatsapp": false
-                },
-                "order_id": "order_TWr8cmMDYa9lph",
-                "payment_plan": false,
-                "reference_id": "case_000000",
-                "reminder_enable": false,
-                "reminders": {},
-                "short_url": "https://rzp.io/rzp/ZENgoZB",
-                "status": "paid",
-                "updated_at": 1788284712,
-                "upi_link": false,
-                "user_id": "",
-                "whatsapp_link": false
-              }
+        "raw_body_sha256": "b9fdca2d7acb8919746164a28185de3cdedea72d940fbecaf6a9858fc7880bd3",
+        "entities": {
+          "payment": {
+            "id": "pay_TWrJELO1R1PGeA",
+            "status": "failed",
+            "amount": 325635,
+            "currency": "INR",
+            "method": "card",
+            "captured": false,
+            "order_id": "order_TWr8cmMDYa9lph",
+            "error_code": "BAD_REQUEST_ERROR",
+            "error_description": "Your payment could not be completed as this business accepts domestic (Indian) card payments only. Try another payment method.",
+            "error_reason": "international_transaction_not_allowed",
+            "error_source": "business",
+            "error_step": "payment_initiation",
+            "created_at": 1788284531,
+            "notes": {
+              "rail": "card",
+              "source": "settle CP12",
+              "case_id": "case_000000",
+              "decline_code": "insufficient_funds",
+              "attempt_number": "1"
             }
           }
-        },
-        "event_id": "TWrMRvZupipOXq",
-        "body_sha256": "12953343244b1c74c7c8e74cbc4d25082928f674374c03529ff34c6a0aa294cf",
+        }
+      },
+      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "hash": "d4da7e3d45a7e297c5342a2c208db51511012f151018df5a1bd792236f7b1986"
+    },
+    {
+      "projection": {
+        "ledger_seq": 1,
+        "case_id": "case_000000",
+        "at": "2026-09-01T17:45:13.092602+00:00",
+        "arm": "EDGE",
+        "kind": "event",
+        "actor": "system",
+        "reason_code": "WEBHOOK_RECEIVED",
+        "event": "payment.captured",
+        "event_id": "TWrMQsZY7zwrJg",
+        "event_created_at": 1788284712,
+        "account_id": "acc_TWRO6cLRL6kaE7",
         "delivery_count": 1,
         "subscribed": true,
         "signature_verified": true,
-        "source": "RAZORPAY_TEST_MODE"
+        "raw_body_sha256": "0e6f384aff9d4085d6748907450ae25619d116abe52f28ae87ffb108d7f30185",
+        "entities": {
+          "payment": {
+            "id": "pay_TWrM4OohnxgMOu",
+            "status": "captured",
+            "amount": 325635,
+            "currency": "INR",
+            "method": "card",
+            "captured": true,
+            "order_id": "order_TWr8cmMDYa9lph",
+            "error_code": null,
+            "error_description": null,
+            "error_reason": null,
+            "error_source": null,
+            "error_step": null,
+            "created_at": 1788284693,
+            "notes": {
+              "rail": "card",
+              "source": "settle CP12",
+              "case_id": "case_000000",
+              "decline_code": "insufficient_funds",
+              "attempt_number": "1"
+            }
+          }
+        }
       },
-      "reason_code": "WEBHOOK_RECEIVED",
-      "prev_hash": "aa8d08e9802eae6eaeea971f21b87684ab727a9632d49c29a3389cc4384f7bac",
-      "hash": "9787c2a93a8473362f6cc7c9b76efed0141027eda6a43ae46e268e69a305a480",
-      "arm": "EDGE"
+      "prev_hash": "d4da7e3d45a7e297c5342a2c208db51511012f151018df5a1bd792236f7b1986",
+      "hash": "3f14c315a4519fe38e968c24103b75726fd98fa3cc0fd936bab9310df2d568f3"
+    },
+    {
+      "projection": {
+        "ledger_seq": 2,
+        "case_id": "case_000000",
+        "at": "2026-09-01T17:45:14.033048+00:00",
+        "arm": "EDGE",
+        "kind": "event",
+        "actor": "system",
+        "reason_code": "WEBHOOK_RECEIVED",
+        "event": "payment_link.paid",
+        "event_id": "TWrMRvZupipOXq",
+        "event_created_at": 1788283873,
+        "account_id": "acc_TWRO6cLRL6kaE7",
+        "delivery_count": 1,
+        "subscribed": true,
+        "signature_verified": true,
+        "raw_body_sha256": "12953343244b1c74c7c8e74cbc4d25082928f674374c03529ff34c6a0aa294cf",
+        "entities": {
+          "payment": {
+            "id": "pay_TWrM4OohnxgMOu",
+            "status": "captured",
+            "amount": 325635,
+            "currency": "INR",
+            "method": "card",
+            "captured": true,
+            "order_id": "order_TWr8cmMDYa9lph",
+            "error_code": null,
+            "error_description": null,
+            "error_reason": null,
+            "error_source": null,
+            "error_step": null,
+            "created_at": 1788284693,
+            "notes": {
+              "attempt_number": "1",
+              "case_id": "case_000000",
+              "decline_code": "insufficient_funds",
+              "rail": "card",
+              "source": "settle CP12"
+            }
+          },
+          "payment_link": {
+            "id": "plink_TWr7e2EFJ8ITvn",
+            "status": "paid",
+            "amount": 325635,
+            "amount_paid": 325635,
+            "currency": "INR",
+            "reference_id": "case_000000",
+            "short_url": "https://rzp.io/rzp/ZENgoZB",
+            "created_at": 1788283873,
+            "notes": {
+              "attempt_number": "1",
+              "case_id": "case_000000",
+              "decline_code": "insufficient_funds",
+              "rail": "card",
+              "source": "settle CP12"
+            }
+          },
+          "order": {
+            "id": "order_TWr8cmMDYa9lph",
+            "status": "paid",
+            "amount": 325635,
+            "amount_paid": 325635,
+            "amount_due": 0,
+            "currency": "INR",
+            "attempts": 2,
+            "receipt": "case_000000",
+            "created_at": 1788283928,
+            "notes": {
+              "attempt_number": "1",
+              "case_id": "case_000000",
+              "decline_code": "insufficient_funds",
+              "rail": "card",
+              "source": "settle CP12"
+            }
+          }
+        }
+      },
+      "prev_hash": "3f14c315a4519fe38e968c24103b75726fd98fa3cc0fd936bab9310df2d568f3",
+      "hash": "3a74158dd71e688b658eee7b8e8e4df99335b0409bac05c4d9a5ef05b9df1291"
     }
   ],
-  "chain": {
-    "entries_verified": 3,
-    "verified": true,
-    "head": "9787c2a93a8473362f6cc7c9b76efed0141027eda6a43ae46e268e69a305a480",
-    "verify_with": "python -m settle.audit.verify out/audit_edge.jsonl"
-  },
-  "redaction": {
-    "applied": true,
-    "field": "payer phone number, wherever it appeared in the event tree",
-    "reason": "Razorpay autofilled the account holder's real mobile number at checkout despite a placeholder being intended, and this file is committed to a public repo. Nothing else is redacted: the plink_, pay_ and order_ ids are test-mode objects and are safe.",
-    "consequence": "The `hash` and `prev_hash` values below were computed over the event exactly as Razorpay sent it, BEFORE this redaction. Recomputing a hash from the payload printed here will therefore NOT match, and that is expected rather than a broken chain. The unredacted chain verifies in out/audit_edge.jsonl, which is gitignored and stays on the machine that received it. `body_sha256` on each delivery is over the raw signed bytes."
-  }
+  "chain_head": "3a74158dd71e688b658eee7b8e8e4df99335b0409bac05c4d9a5ef05b9df1291",
+  "entries_in_local_ledger": 3
 }
