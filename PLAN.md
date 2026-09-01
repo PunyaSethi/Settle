@@ -33,7 +33,8 @@ of what shipped, not a retrospective invented after the fact.
 | CP11 + CP11.1 | `1d27c60` | Sourcing, sensitivity, two fixes the sourcing found |
 | CP12 | `55b6e47` | Razorpay test mode, real at the edges |
 | CP12.1 | `1444842` | Self-verifying artefact, then done with Razorpay |
-| CP12.2 | this | Three loose ends, then charts |
+| CP12.2 | `1aa5de8` | Three loose ends, then charts |
+| CP13 | this | Charts and README — the first thing a judge reads |
 
 ## CP12 — Razorpay test mode, real at the edges
 
@@ -117,5 +118,46 @@ at nothing since CP2. The section now exists, and its first paragraph names all
 six outstanding entries rather than implying the four present ones are the whole
 list. Writing them needs SPEC §12 and PRIORS open; that is D5.
 
-Razorpay is done. Next is D5: README §19 order, the three-screen viewer, the
-voice clips.
+Razorpay is done.
+
+## CP13 — charts and README
+
+`settle/eval/report.py` and `settle/eval/charts.py`, `KNOWN_LIMITATIONS.md`, the
+README in SPEC §19's fixed order, and CHT-1/2/3. 697 tests green.
+
+The structural decision is the seam between the two new modules. `report.py`
+runs five arms and reconciles each, then writes `out/charts/metrics.json`;
+`charts.py` draws only from that file. Without the seam, CHT-1's determinism
+check would need a simulation in the loop and the committed PNGs would not be
+reproducible by anyone cloning the repo.
+
+CHT-3 is the one that carries the checkpoint. It pulls every number out of the
+committed README and requires each to appear in a committed artefact. Verified
+adversarially rather than assumed: injecting a fabricated 34.71% into the
+headline table fails it, and a real figure attributed to the wrong arm fails the
+companion test.
+
+### What the by-class breakdown found
+
+The entire OURS margin is one decline class. `auth_abandoned` goes to OURS by
+48.9 points. It LOSES to B2 on three of six: `dead_instrument` by 10.7,
+`transient` by 3.8, and `time_shiftable` — 899 of 2,000 cases — by 3.4. The
+aggregate 27.90% against 25.65% hides that completely.
+
+Nothing had broken the incremental rate down by class before. The sweep varies
+priors and the headline table aggregates; neither asks where the money comes
+from. It is reported in the README results section rather than in Known
+Limitations, because it is a fact about the result and not a caveat on it.
+
+The obvious next experiment follows from it and has not been run: a hybrid using
+OURS on `auth_abandoned` and the ladder elsewhere would likely beat both.
+
+### Known Limitations, discharged
+
+The six references that had pointed at a non-existent section since CP2 are
+written, alongside the measured negative results: withdrawn retry timing, 184 of
+188 priors asserted, the calibration trade stated as two numbers, the 4x flip on
+an asserted prior, the auditor's simulation-only validation, and the three world
+bugs that each invalidated a headline before being fixed.
+
+Next is D5: the three-screen viewer and the voice clips.

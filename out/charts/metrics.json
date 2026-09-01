@@ -1,0 +1,1168 @@
+{
+  "arms": {
+    "B0": {
+      "actually_settled": 450,
+      "arm": "B0",
+      "believed_recovered": 0,
+      "cases": 2000,
+      "censored_fraction": 0.0,
+      "compliance_violations": 0,
+      "contacts": 0,
+      "contacts_per_case": 0.0,
+      "cost_per_100": null,
+      "dispatches": 0,
+      "incremental_cases": 0,
+      "incremental_paise": 0,
+      "incremental_rate": 0.0,
+      "mode": "ENFORCE",
+      "recovered": 450,
+      "reported_minus_reconciled_cases": -450,
+      "silent_failure_rate": 0.0,
+      "silent_failures": {
+        "SF-1": 0,
+        "SF-2": 0,
+        "SF-3": 0,
+        "SF-4": 0,
+        "SF-5": 0,
+        "SF-6": 0,
+        "SF-7": 0
+      },
+      "spend_paise": 0
+    },
+    "B1": {
+      "actually_settled": 697,
+      "arm": "B1",
+      "believed_recovered": 404,
+      "cases": 2000,
+      "censored_fraction": 0.0,
+      "compliance_violations": 0,
+      "contacts": 177,
+      "contacts_per_case": 0.0885,
+      "cost_per_100": 0.06436428480940388,
+      "dispatches": 1388,
+      "incremental_cases": 243,
+      "incremental_paise": 17602930,
+      "incremental_rate": 0.1215,
+      "mode": "ENFORCE",
+      "recovered": 690,
+      "reported_minus_reconciled_cases": -293,
+      "silent_failure_rate": 0.023,
+      "silent_failures": {
+        "SF-1": 16,
+        "SF-2": 0,
+        "SF-3": 0,
+        "SF-4": 23,
+        "SF-5": 0,
+        "SF-6": 0,
+        "SF-7": 7
+      },
+      "spend_paise": 11330
+    },
+    "B2": {
+      "actually_settled": 970,
+      "arm": "B2",
+      "believed_recovered": 776,
+      "cases": 2000,
+      "censored_fraction": 0.0,
+      "compliance_violations": 0,
+      "contacts": 2852,
+      "contacts_per_case": 1.426,
+      "cost_per_100": 0.27138129915063075,
+      "dispatches": 6576,
+      "incremental_cases": 513,
+      "incremental_paise": 37268596,
+      "incremental_rate": 0.2565,
+      "mode": "ENFORCE",
+      "recovered": 960,
+      "reported_minus_reconciled_cases": -194,
+      "silent_failure_rate": 0.053,
+      "silent_failures": {
+        "SF-1": 23,
+        "SF-2": 17,
+        "SF-3": 0,
+        "SF-4": 57,
+        "SF-5": 0,
+        "SF-6": 0,
+        "SF-7": 9
+      },
+      "spend_paise": 101140
+    },
+    "B3": {
+      "actually_settled": 1294,
+      "arm": "B3",
+      "believed_recovered": 1223,
+      "cases": 2000,
+      "censored_fraction": 0.0,
+      "compliance_violations": 889,
+      "contacts": 5067,
+      "contacts_per_case": 2.5335,
+      "cost_per_100": 4.770268491963353,
+      "dispatches": 13737,
+      "incremental_cases": 833,
+      "incremental_paise": 56514429,
+      "incremental_rate": 0.4165,
+      "mode": "OBSERVE",
+      "recovered": 1278,
+      "reported_minus_reconciled_cases": -71,
+      "silent_failure_rate": 0.527,
+      "silent_failures": {
+        "SF-1": 37,
+        "SF-2": 10,
+        "SF-3": 0,
+        "SF-4": 103,
+        "SF-5": 79,
+        "SF-6": 810,
+        "SF-7": 15
+      },
+      "spend_paise": 2695890
+    },
+    "OURS": {
+      "actually_settled": 1015,
+      "arm": "OURS",
+      "believed_recovered": 815,
+      "cases": 2000,
+      "censored_fraction": 0.0,
+      "compliance_violations": 0,
+      "contacts": 9,
+      "contacts_per_case": 0.0045,
+      "cost_per_100": 0.08950272104357186,
+      "dispatches": 6993,
+      "incremental_cases": 558,
+      "incremental_paise": 39166407,
+      "incremental_rate": 0.279,
+      "mode": "ENFORCE",
+      "recovered": 1006,
+      "reported_minus_reconciled_cases": -200,
+      "silent_failure_rate": 0.0145,
+      "silent_failures": {
+        "SF-1": 23,
+        "SF-2": 0,
+        "SF-3": 0,
+        "SF-4": 0,
+        "SF-5": 0,
+        "SF-6": 0,
+        "SF-7": 6
+      },
+      "spend_paise": 35055
+    }
+  },
+  "by_decline_class": {
+    "ambiguous": {
+      "b0_recovered": 63,
+      "b2": {
+        "cases": 42,
+        "paise": 2450080,
+        "rate": 0.16216216216216217
+      },
+      "cases": 259,
+      "ours": {
+        "cases": 48,
+        "paise": 2695542,
+        "rate": 0.18532818532818532
+      },
+      "ours_minus_b2_rate": 0.023166023166023147
+    },
+    "auth_abandoned": {
+      "b0_recovered": 50,
+      "b2": {
+        "cases": 6,
+        "paise": 247331,
+        "rate": 0.025974025974025976
+      },
+      "cases": 231,
+      "ours": {
+        "cases": 119,
+        "paise": 7610420,
+        "rate": 0.5151515151515151
+      },
+      "ours_minus_b2_rate": 0.48917748917748916
+    },
+    "dead_instrument": {
+      "b0_recovered": 67,
+      "b2": {
+        "cases": 35,
+        "paise": 2696690,
+        "rate": 0.10703363914373089
+      },
+      "cases": 327,
+      "ours": {
+        "cases": 0,
+        "paise": 0,
+        "rate": 0.0
+      },
+      "ours_minus_b2_rate": -0.10703363914373089
+    },
+    "terminal": {
+      "b0_recovered": 15,
+      "b2": {
+        "cases": 0,
+        "paise": 0,
+        "rate": 0.0
+      },
+      "cases": 74,
+      "ours": {
+        "cases": 0,
+        "paise": 0,
+        "rate": 0.0
+      },
+      "ours_minus_b2_rate": 0.0
+    },
+    "time_shiftable": {
+      "b0_recovered": 207,
+      "b2": {
+        "cases": 359,
+        "paise": 27033423,
+        "rate": 0.39933259176863184
+      },
+      "cases": 899,
+      "ours": {
+        "cases": 328,
+        "paise": 24385412,
+        "rate": 0.36484983314794217
+      },
+      "ours_minus_b2_rate": -0.03448275862068967
+    },
+    "transient": {
+      "b0_recovered": 48,
+      "b2": {
+        "cases": 71,
+        "paise": 4841072,
+        "rate": 0.3380952380952381
+      },
+      "cases": 210,
+      "ours": {
+        "cases": 63,
+        "paise": 4475033,
+        "rate": 0.3
+      },
+      "ours_minus_b2_rate": -0.038095238095238126
+    }
+  },
+  "calibration": {
+    "brier": 0.20482578983297062,
+    "brier_all": 0.20577505022344686,
+    "ece": 0.039165952683588155,
+    "ece_all": 0.03841796227747518,
+    "model": "model_cba710e51c27.pkl",
+    "n_covered_rows": 27353,
+    "n_extrapolated_cells": 37,
+    "n_test_rows": 28204,
+    "reliability": [
+      {
+        "actual": 0.5185185185185185,
+        "bucket": "0.0-0.1",
+        "extrapolated": true,
+        "extrapolated_fraction": 0.0,
+        "n": 27,
+        "n_extrapolated": 0,
+        "predicted": 0.08794138506538882
+      },
+      {
+        "actual": 0.32266666666666666,
+        "bucket": "0.1-0.2",
+        "extrapolated": false,
+        "extrapolated_fraction": 0.042666666666666665,
+        "n": 375,
+        "n_extrapolated": 16,
+        "predicted": 0.1585051098411997
+      },
+      {
+        "actual": 0.31239388794567063,
+        "bucket": "0.2-0.3",
+        "extrapolated": true,
+        "extrapolated_fraction": 0.100169779286927,
+        "n": 1178,
+        "n_extrapolated": 118,
+        "predicted": 0.2598311981110317
+      },
+      {
+        "actual": 0.42095914742451157,
+        "bucket": "0.3-0.4",
+        "extrapolated": true,
+        "extrapolated_fraction": 0.09887507400828893,
+        "n": 1689,
+        "n_extrapolated": 167,
+        "predicted": 0.3481640208055032
+      },
+      {
+        "actual": 0.48672139063254466,
+        "bucket": "0.4-0.5",
+        "extrapolated": true,
+        "extrapolated_fraction": 0.05601158860453887,
+        "n": 2071,
+        "n_extrapolated": 116,
+        "predicted": 0.45273107060134915
+      },
+      {
+        "actual": 0.5827392120075047,
+        "bucket": "0.5-0.6",
+        "extrapolated": false,
+        "extrapolated_fraction": 0.04352720450281426,
+        "n": 2665,
+        "n_extrapolated": 116,
+        "predicted": 0.55335072171167
+      },
+      {
+        "actual": 0.6800106397127278,
+        "bucket": "0.6-0.7",
+        "extrapolated": false,
+        "extrapolated_fraction": 0.029658199228620827,
+        "n": 7519,
+        "n_extrapolated": 223,
+        "predicted": 0.6598699712794385
+      },
+      {
+        "actual": 0.6986805768640687,
+        "bucket": "0.7-0.8",
+        "extrapolated": false,
+        "extrapolated_fraction": 0.013194231359312672,
+        "n": 6518,
+        "n_extrapolated": 86,
+        "predicted": 0.7397056569960737
+      },
+      {
+        "actual": 0.8315086782376502,
+        "bucket": "0.8-0.9",
+        "extrapolated": false,
+        "extrapolated_fraction": 0.002403204272363151,
+        "n": 3745,
+        "n_extrapolated": 9,
+        "predicted": 0.8524245779057806
+      },
+      {
+        "actual": 0.8647083160943319,
+        "bucket": "0.9-1.0",
+        "extrapolated": false,
+        "extrapolated_fraction": 0.0,
+        "n": 2417,
+        "n_extrapolated": 0,
+        "predicted": 0.9390156153272448
+      }
+    ],
+    "selection": {
+      "criterion": "uplift_ece, subject to a resolution floor (A84 x A92)",
+      "overall": {
+        "GBM": 0.039165952683588155,
+        "GBM+iso": 0.015960678544383086,
+        "LR": 0.015527215521165006,
+        "LR+iso": 0.01847932715638489
+      },
+      "rejected_on_resolution": [
+        "GBM+iso"
+      ],
+      "resolution": {
+        "GBM": {
+          "flat_rate": 0.0,
+          "median": 0.07076357920959953,
+          "n": 600,
+          "p90": 0.1615600418945602
+        },
+        "GBM+iso": {
+          "flat_rate": 0.115,
+          "median": 0.029784720715508417,
+          "n": 600,
+          "p90": 0.12965256524778968
+        },
+        "LR": {
+          "flat_rate": 0.0,
+          "median": 0.0864780858309232,
+          "n": 600,
+          "p90": 0.17860066403305042
+        },
+        "LR+iso": {
+          "flat_rate": 0.005,
+          "median": 0.05414944690941381,
+          "n": 600,
+          "p90": 0.18619334591373637
+        }
+      },
+      "uplift": {
+        "GBM": 0.017570933351490594,
+        "GBM+iso": 0.019292977580451846,
+        "LR": 0.027377709500172598,
+        "LR+iso": 0.029571894232047417
+      }
+    },
+    "shipped": "GBM",
+    "trade": {
+      "rejected": "GBM+iso",
+      "rejected_overall_ece": 0.015960678544383086,
+      "rejected_resolution_flat_rate": 0.115,
+      "rejected_uplift_ece": 0.019292977580451846,
+      "shipped": "GBM",
+      "shipped_overall_ece": 0.039165952683588155,
+      "shipped_resolution_median": 0.07076357920959953,
+      "shipped_uplift_ece": 0.017570933351490594
+    }
+  },
+  "meta": {
+    "cases": 2000,
+    "checkpoint": "CP13",
+    "generated_at": "2026-09-01T18:31:15.973902+00:00",
+    "model": "model_cba710e51c27.pkl",
+    "note": "Every number the README quotes comes from this file (CHT-3). Derived from the run artefacts and out/sensitivity.json, never typed by hand.",
+    "regenerate": "python -m settle.eval.report --cases 2000 --seed 42",
+    "seed": 42
+  },
+  "sensitivity": {
+    "available": true,
+    "base": {
+      "b0": {
+        "contacts": 0,
+        "contacts_per_case": 0.0,
+        "cost_per_100": null,
+        "dispatches": 0,
+        "incremental_cases": 0,
+        "incremental_paise": 0,
+        "incremental_rate": 0.0,
+        "recovered": 450,
+        "spend_paise": 0
+      },
+      "b2": {
+        "contacts": 2852,
+        "contacts_per_case": 1.426,
+        "cost_per_100": 0.27138129915063075,
+        "dispatches": 6576,
+        "incremental_cases": 513,
+        "incremental_paise": 37268596,
+        "incremental_rate": 0.2565,
+        "recovered": 960,
+        "spend_paise": 101140
+      },
+      "headline_holds": true,
+      "ours": {
+        "contacts": 9,
+        "contacts_per_case": 0.0045,
+        "cost_per_100": 0.08950272104357186,
+        "dispatches": 6993,
+        "incremental_cases": 558,
+        "incremental_paise": 39166407,
+        "incremental_rate": 0.279,
+        "recovered": 1006,
+        "spend_paise": 35055
+      },
+      "restraint_holds": true,
+      "seconds": 41.51,
+      "winner": "GBM"
+    },
+    "flipping": [
+      "mandate_update.success_rate.*",
+      "contact_response.rate.*",
+      "contact_response.behaviour_multiplier.*"
+    ],
+    "members": [
+      {
+        "flips_at": [
+          4.0
+        ],
+        "holds_everywhere": false,
+        "name": "mandate_update.success_rate.*",
+        "points": [
+          {
+            "b2_incremental_rate": 0.2515,
+            "headline_holds": true,
+            "margin": 0.027500000000000024,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.253,
+            "headline_holds": true,
+            "margin": 0.026000000000000023,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.268,
+            "headline_holds": true,
+            "margin": 0.01100000000000001,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.279,
+            "headline_holds": false,
+            "margin": 0.0,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          }
+        ],
+        "space": "world",
+        "why": "decides whether 17% of the batch \u2014 `dead_instrument` \u2014 is winnable at all (A86)"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "mandate_update.response_delay_h_max",
+        "points": [
+          {
+            "b2_incremental_rate": 0.2575,
+            "headline_holds": true,
+            "margin": 0.02150000000000002,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.254,
+            "headline_holds": true,
+            "margin": 0.025000000000000022,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2575,
+            "headline_holds": true,
+            "margin": 0.02150000000000002,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2585,
+            "headline_holds": true,
+            "margin": 0.020500000000000018,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          }
+        ],
+        "space": "world",
+        "why": "the wait that makes a mandate update a decision rather than a coin flip; it competes with the 30-day decision horizon"
+      },
+      {
+        "flips_at": [
+          4.0
+        ],
+        "holds_everywhere": false,
+        "name": "contact_response.rate.*",
+        "points": [
+          {
+            "b2_incremental_rate": 0.25,
+            "headline_holds": true,
+            "margin": 0.029000000000000026,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.252,
+            "headline_holds": true,
+            "margin": 0.027000000000000024,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2645,
+            "headline_holds": true,
+            "margin": 0.014500000000000013,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.28,
+            "headline_holds": false,
+            "margin": -0.0010000000000000009,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          }
+        ],
+        "space": "world",
+        "why": "decides whether contacting anyone is viable at all, and therefore whether the contact-restraint result is a finding or an artefact (A89)"
+      },
+      {
+        "flips_at": [
+          4.0
+        ],
+        "holds_everywhere": false,
+        "name": "contact_response.behaviour_multiplier.*",
+        "points": [
+          {
+            "b2_incremental_rate": 0.25,
+            "headline_holds": true,
+            "margin": 0.029000000000000026,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.252,
+            "headline_holds": true,
+            "margin": 0.027000000000000024,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2645,
+            "headline_holds": true,
+            "margin": 0.014500000000000013,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.28,
+            "headline_holds": false,
+            "margin": -0.0010000000000000009,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          }
+        ],
+        "space": "world",
+        "why": "\u00a78's debtors modulate A89's response rate, so this sets how much of the batch is reachable by a message at all"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "contact_response.delay_h_max",
+        "points": [
+          {
+            "b2_incremental_rate": 0.2555,
+            "headline_holds": true,
+            "margin": 0.02350000000000002,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2555,
+            "headline_holds": true,
+            "margin": 0.02350000000000002,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.255,
+            "headline_holds": true,
+            "margin": 0.02400000000000002,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2515,
+            "headline_holds": true,
+            "margin": 0.027500000000000024,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          }
+        ],
+        "space": "world",
+        "why": "how long a contact takes to turn into money; a response due past the decision horizon still lands (\u00a76.1)"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "natural_recovery.*",
+        "points": [
+          {
+            "b2_incremental_rate": 0.348,
+            "headline_holds": true,
+            "margin": 0.02200000000000002,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.37,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.3155,
+            "headline_holds": true,
+            "margin": 0.019000000000000017,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.3345,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.145,
+            "headline_holds": true,
+            "margin": 0.018000000000000016,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.163,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.079,
+            "headline_holds": true,
+            "margin": 0.011499999999999996,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.0905,
+            "restraint_holds": true
+          }
+        ],
+        "space": "world",
+        "why": "B0's recovery, subtracted from every arm (\u00a714.3)"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "natural_recovery.max_day",
+        "points": [
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2905,
+            "headline_holds": true,
+            "margin": 0.019500000000000017,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.31,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.3295,
+            "headline_holds": true,
+            "margin": 0.019999999999999962,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.3495,
+            "restraint_holds": true
+          }
+        ],
+        "space": "world",
+        "why": "when a self-cure lands, which decides how much of B0's recovery falls inside the 60-day observation horizon"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "action_lift.*",
+        "points": [
+          {
+            "b2_incremental_rate": 0.097,
+            "headline_holds": true,
+            "margin": 0.0305,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.1275,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.157,
+            "headline_holds": true,
+            "margin": 0.04600000000000001,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.203,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.35,
+            "headline_holds": true,
+            "margin": 0.010000000000000009,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.36,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.404,
+            "headline_holds": true,
+            "margin": 0.0010000000000000009,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.405,
+            "restraint_holds": true
+          }
+        ],
+        "space": "world",
+        "why": "whether a retry outperforms a message \u2014 upstream of every rupee in \u00a714.4"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "world.liquidity_window_days",
+        "points": [
+          {
+            "b2_incremental_rate": 0.2525,
+            "headline_holds": true,
+            "margin": 0.02400000000000002,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.2765,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2525,
+            "headline_holds": true,
+            "margin": 0.02400000000000002,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.2765,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.258,
+            "headline_holds": true,
+            "margin": 0.02150000000000002,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.2795,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2615,
+            "headline_holds": true,
+            "margin": 0.020999999999999963,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.2825,
+            "restraint_holds": true
+          }
+        ],
+        "space": "world",
+        "why": "how often a time_shiftable retry lands inside the liquidity window; named a REQUIRED member since CP2.3 (A54)"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "p_opt_out.*",
+        "points": [
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02300000000000002,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.2795,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02300000000000002,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.2795,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02200000000000002,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.2785,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02200000000000002,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.2785,
+            "restraint_holds": true
+          }
+        ],
+        "space": "policy",
+        "why": "98.6% of a contact's priced cost at the shipped LTV \u2014 the term that makes OURS decline a contact (\u00a720, A26)"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "ltv_months",
+        "points": [
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02300000000000002,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.2795,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02300000000000002,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.2795,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02200000000000002,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.2785,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02200000000000002,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.2785,
+            "restraint_holds": true
+          }
+        ],
+        "space": "policy",
+        "why": "the other half of a contact's priced cost: opt_out_cost = P(opt_out) x plan_value x ltv_months"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "economic_stop_multiple",
+        "points": [
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02350000000000002,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.28,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02200000000000002,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.2785,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02200000000000002,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.2785,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.019000000000000017,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.2755,
+            "restraint_holds": true
+          }
+        ],
+        "space": "policy",
+        "why": "S7's hurdle rate. At CP9 it declined a mandate-update campaign returning 1.69x on the project's own priced cost, so it \u2014 not the estimator \u2014 decides the restraint result at the margin"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "class_retry_cap.dead_instrument",
+        "points": [
+          {
+            "b2_incremental_rate": 0.245,
+            "headline_holds": true,
+            "margin": 0.03400000000000003,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.254,
+            "headline_holds": true,
+            "margin": 0.025000000000000022,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          }
+        ],
+        "space": "policy",
+        "why": "G10's budget for a revived mandate, which bounds how much of the `dead_instrument` slice A86 made reachable"
+      },
+      {
+        "flips_at": [],
+        "holds_everywhere": true,
+        "name": "MAX_FLAT_DECISION_RATE",
+        "points": [
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 0.25,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 0.5,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 1.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 2.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          },
+          {
+            "b2_incremental_rate": 0.2565,
+            "headline_holds": true,
+            "margin": 0.02250000000000002,
+            "multiple": 4.0,
+            "ours_incremental_rate": 0.279,
+            "restraint_holds": true
+          }
+        ],
+        "space": "model",
+        "why": "the resolution floor a scorer must clear to be selectable \u2014 it decides which model ships (A92)"
+      }
+    ],
+    "meta": {
+      "cases": 2000,
+      "cost_per_100": "priced spend (\u00a720) per \u20b9100 of incremental recovery",
+      "estimator_retrained": false,
+      "headline": "OURS incremental rate > B2 incremental rate",
+      "model": "model_cba710e51c27.pkl",
+      "multiples": [
+        0.25,
+        0.5,
+        1.0,
+        2.0,
+        4.0
+      ],
+      "restraint": "OURS contacts per case < B2 contacts per case",
+      "seed": 42,
+      "shipped_winner": "GBM",
+      "wall_seconds": 1283.7
+    },
+    "n_holding_everywhere": 11,
+    "n_members": 14
+  }
+}
