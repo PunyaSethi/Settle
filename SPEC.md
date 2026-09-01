@@ -1249,11 +1249,11 @@ at exactly 24h. **The point of A97 is not that it changed a number. It is that
 the rule now holds because it is enforced rather than because two unrelated
 constants happen to be equal**, and it will keep holding if either of them moves.
 
-## 16. Razorpay integration## 16. Razorpay integration
+## 16. Razorpay integration
 
 Real at the edges, simulated at scale.
 
-- Three FastAPI routes:
+- Three FastAPI routes, and exactly three:
 
   ```
   POST /webhooks/razorpay   signature-verified webhook receiver
@@ -1261,15 +1261,55 @@ Real at the edges, simulated at scale.
   GET  /                    serves the static viewer
   ```
 
+  A route that is declared and not yet built returns 501, never 404. The route
+  table is a contract; one that grows to fit whatever got implemented is not.
+
 - HMAC SHA256 signature verification, mandatory
+- Verification happens BEFORE the body is parsed. The signature covers the raw
+  bytes, so re-serialising a parsed body checks a different string from the one
+  that was signed; and parsing first runs a decoder on unauthenticated input,
+  then reports a *parse* error to a sender holding no secret. A malformed body
+  with a bad signature must fail on the signature.
 - Handler verifies, writes the raw event, returns 200. Nothing else.
   Razorpay requires 2XX within 5 seconds; it retries with exponential backoff
-  for 24 hours and disables the webhook after 24h of failure.
-- Idempotency store keyed on event id — real webhooks genuinely do arrive twice
-- Subscribed events: `payment.captured`, `payment.failed`, `payment_link.paid`
-- Demo shows one real `pay_...` / `plink_...` id next to its ledger row
+  for 24 hours and disables the webhook after 24h of failure. All processing
+  runs after the response is sent, never inside the handler.
+- The raw event is on disk before the response starts, which is INV-5's
+  write-ahead ordering applied to the edge: a record written after the 200 does
+  not exist if the process dies in between, and Razorpay never re-sends an
+  event it has already had a 2XX for.
+- Idempotency store keyed on event id — real webhooks genuinely do arrive twice.
+  This is SF-3's production instance. The store holds exactly one row per event
+  id, and that row carries a `delivery_count`: a replay is counted, not
+  discarded, mirroring `ReportedOutcome.arrival_count` in §5.5. Exactly one
+  delivery is allowed to cause work.
+- Edge traffic writes to its own ledger under arm `EDGE`, not into a per-arm
+  evaluation ledger. The evaluation's ledgers replay from a seed; interleaving
+  live traffic into one would make it neither replayable nor live.
+- Subscribed events: `payment.captured`, `payment.failed`, `payment_link.paid`.
+  An unsubscribed event arriving is recorded and flagged — it means the
+  dashboard and the code disagree, and the ledger is where that becomes visible.
+- Demo shows one real `pay_...` / `plink_...` id next to its ledger row,
+  committed to `out/razorpay_demo.json` so the artefact survives ngrok going
+  away.
 
-Credentials in `.env` only. `.env` in `.gitignore` from commit one.
+**Real vs synthetic, enforced by the type.** Every payment link record carries an
+explicit `source`: `RAZORPAY_TEST_MODE` for an object that exists in Razorpay's
+test mode, `MOCK_SANDBOX` for one constructed locally. The pairing is validated,
+not trusted — a mock id wears a `MOCK_plink_` prefix and a mock URL sits on the
+reserved `.invalid` TLD (RFC 2606), so the difference survives a screenshot and
+a record cannot be relabelled after it is built. This is the one idea worth
+taking from the competing repos in the track, and its rule is theirs: a payment
+link created is not revenue recovered.
+
+`RAZORPAY_MOCK_MODE` defaults to true, so a judge cloning the repo without
+credentials gets a working demo rather than a stack trace. The opposite default
+is the dangerous one — a missing key that yields a plausible-looking id. Live
+keys are refused outright; there is no live path.
+
+Credentials in `.env` only, read from the environment and never hardcoded, and
+scrubbed out of any exception, log line or ledger entry that could carry them.
+`.env` in `.gitignore` from commit one.
 
 ## 17. Repo layout
 
@@ -1614,3 +1654,9 @@ Resolved:
 - 2026-08-31 — A98: §12 — the G1 / TRAI time-band ambiguity recorded rather than guessed. The window is deliberately unchanged. Known Limitations.
 - 2026-08-31 — A99: §15.2 — the exposure finding recorded verbatim: the margin is a claim that contacting is not worth doing, and restraint is a claim about contacts rather than about activity.
 - 2026-08-31 — A100: §15.1 — the sourcing outcome recorded plainly, with the structural reason Indian payments data cannot supply these numbers and the statement that near-miss rows were left ASSERTED deliberately. Counts move to 188 rows: 1 SOURCED, 3 DERIVED, 184 ASSERTED.
+- 2026-09-01 — X7: §16's heading was duplicated on one line (`## 16. Razorpay integration## 16. Razorpay integration`). Corrected.
+- 2026-09-01 — A101: §16 — signature verification is specified to happen BEFORE the body is parsed, with the reason. Test WBH-3.
+- 2026-09-01 — A102: §16 — the idempotency store holds one row per event id carrying a `delivery_count`; a replay is counted rather than discarded, mirroring `ReportedOutcome.arrival_count` in §5.5, and exactly one delivery causes work. SF-3's production instance. Test WBH-4.
+- 2026-09-01 — A103: §16 — the raw event is on disk before the response starts, INV-5's write-ahead ordering applied to the edge. Edge traffic writes to its own ledger under arm `EDGE` rather than into a per-arm evaluation ledger. Test WBH-6.
+- 2026-09-01 — A104: §16 — real-vs-synthetic labelling made a validated property of the record rather than a convention: `source` is `RAZORPAY_TEST_MODE` or `MOCK_SANDBOX`, mock ids carry a `MOCK_plink_` prefix, mock URLs sit on the reserved `.invalid` TLD, and the pairing is enforced by the model. `RAZORPAY_MOCK_MODE` defaults to true so the repo runs without credentials; live keys are refused. Tests RZP-1, RZP-2.
+- 2026-09-01 — A105: §16 — the route table is fixed at exactly three, and a declared-but-unbuilt route returns 501 rather than 404.

@@ -1,0 +1,68 @@
+# CP12 — Razorpay test mode. Real at the edges.
+#
+# A credibility beat, not a product. One real payment link, one verified
+# webhook, one ledger row carrying a real Razorpay id. Nothing in the simulation
+# changes: no arm, no policy, no metric, no prior is touched by this checkpoint.
+#
+# The claim it buys is the one in DECISIONS.md under "Deliberately borrowed":
+# simulated at scale, real at the edges. The batch is 10,000 synthetic cases and
+# says so; the object in out/razorpay_demo.json is a real Razorpay test-mode
+# payment link, paid over the network, whose webhook arrived through ngrok, was
+# verified by HMAC SHA256, and was written to the hash-chained ledger.
+#
+# The labelling discipline is the substance. Every PaymentLinkRecord carries an
+# explicit source — RAZORPAY_TEST_MODE or MOCK_SANDBOX — and the pydantic model
+# validates the pairing, so a synthetic record cannot be relabelled as a real
+# one. Mock ids wear a `MOCK_plink_` prefix and mock URLs sit on the reserved
+# `.invalid` TLD, which means the difference survives being screenshotted.
+#
+# RAZORPAY_MOCK_MODE defaults to true, so a judge cloning the repo with no
+# credentials gets a working demo rather than a stack trace. The opposite
+# default is the dangerous one: a missing key that produces a plausible id.
+
+settle/api/__init__.py
+settle/api/webhook.py
+settle/api/app.py
+settle/integrations/__init__.py
+settle/integrations/razorpay_client.py
+settle/integrations/idempotency.py
+tests/test_webhook.py
+tests/test_razorpay.py
+SPEC.md
+README.md
+checkpoints/cp12.allowlist
+
+# The demo artefact. Not in the prompt's ALLOWLIST block, but mandated by the
+# checkpoint body ("Save the whole thing to out/razorpay_demo.json and commit
+# it, so the artefact survives ngrok going away"). `out/*` is gitignored, so it
+# needs `git add -f`.
+out/razorpay_demo.json
+
+# --- BLOCKED: two things outside this allowlist ----------------------------
+#
+# 1. The demo runner has no home.
+#
+#    The checkpoint says a judge cloning the repo must get a working demo with
+#    no keys, and RAZORPAY_MOCK_MODE=true delivers that at the library level.
+#    But there is no committed entry point to run: the runner that created
+#    plink_TWr7e2EFJ8ITvn, polled the ledger and wrote out/razorpay_demo.json
+#    lives in the session scratchpad, because this allowlist has no `scripts/`
+#    entry and CC does not add files outside it.
+#
+#    The fix is one `git mv` into `scripts/razorpay_demo.py`, plus a mock-mode
+#    default so `python scripts/razorpay_demo.py` with no .env prints a
+#    MOCK_SANDBOX record and exits clean. Punya's call, not CC's — it is a new
+#    committed file, not an edit to a listed one.
+#
+# 2. `httpx` is not pinned, so `fastapi.testclient.TestClient` cannot be used.
+#
+#    tests/test_webhook.py drives the ASGI application directly instead. That
+#    was the right answer regardless — it can timestamp `http.response.start`
+#    specifically, which is the moment Razorpay's 5-second budget actually
+#    stops, and TestClient cannot — but it was forced rather than chosen.
+#    Installing httpx into .venv without pinning it in requirements.txt would
+#    make the gate green here and red for anyone cloning the repo, which is the
+#    one outcome worth refusing. requirements.txt is not on this allowlist.
+#
+#    No fix needed unless a future checkpoint wants TestClient, in which case
+#    the line is `httpx==0.28.1` in requirements.txt.
