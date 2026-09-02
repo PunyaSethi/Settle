@@ -115,37 +115,40 @@ These are the entries a reader should weigh most heavily. They are results we
 would have preferred not to get, reported at the same volume as the ones we
 would.
 
-### Retry timing was a differentiator, and it is not
+### Liquidity timing was the stated differentiator, and it is dead
 
-We hypothesised that learning *when* to retry — reaching a customer's liquidity
-window — would be a substantial part of the win. We tested it and withdrew the
-claim.
+Two timing hypotheses were tested and they came apart. They are not one finding
+and were reported as one until CP13.2.
 
-The three liquidity features rank 22th, 34th and 40th of 46 by
-permutation importance. The model's probability does move across the eight
-offsets — median spread 6.0 percentage points over 1,770 retry rows — but it is
-not moving because it has found paydays.
+**LIQUIDITY TIMING** — that retries near payday recover more — was the stated
+differentiator. It is dead. `day_of_month_at_dispatch`, `in_liquidity_window`
+and `days_to_month_start` rank 22, 34 and 40 of 46 by permutation importance.
+`world.liquidity_window_days` moves the headline 0.30 points across a 16x sweep,
+and it has been a REQUIRED member of that sweep since CP2.3 precisely because we
+expected it to matter. The claim is withdrawn.
 
-`days_since_last_attempt` is a separate matter and is worth stating plainly
-rather than folding into the same sentence. It ranks 2nd of 46, which is
-near the top. That is a claim about **recency**, not about liquidity: how long
-it has been since the last attempt is a different hypothesis from whether today
-is a payday, and it is the one that survived. `train.py` groups all four as
-"timing features", which understates one and overstates the other.
+**RECENCY** — how long since the last attempt — survived.
+`days_since_last_attempt` ranks 2 of 46. Predicted probability moves a median
+6.0 points across the eight declared offsets over 1,770 retry rows.
 
-**What it costs.** A coarse signal exists; a liquidity curve does not. The
-retry-timing story is not available to us, and a chunk of what makes this
-project interesting has to come from the observability layer instead. We record
-this as a measured negative result rather than deleting the hypothesis and
-writing the README as though we had never held it. (SPEC §10.1, A83)
+**What it costs.** The differentiator we set out to build is not there. A coarse
+signal exists and it is about recency, which is a weaker and much more ordinary
+claim: "retry sooner after a failure" is not "we learned when your salary
+lands". The retry-timing story is unavailable, and what makes this project
+interesting has to come from the observability layer instead. We record it as a
+measured negative result rather than deleting the hypothesis and writing as
+though we had never held it. A83's withdrawal stands and its scope is unchanged:
+liquidity, not recency. (SPEC §10.1, A83, A124)
 
-**A note on these two numbers.** Until CP13.1 they existed only in `train.py`'s
-stdout, and the figures the README carried — 3.7 points, ranks 26–37 of 45 —
-reproduced neither. They predated A93, which recomputed
-`days_since_last_attempt` at the dispatch moment and added a 46th feature. They
-were carried forward from an old training log without the training being re-run.
-They are computed into `out/metrics.json` now and checked by CHT-3, which is the
-whole argument for that test in one incident.
+**What these numbers replaced.** Until CP13.1 they existed only in `train.py`'s
+stdout, and the figures carried in the README — 3.7-point median spread, ranks
+26–37 of 45 — reproduced none of the current values. They predated A93, which
+recomputed `days_since_last_attempt` at the dispatch moment and added a 46th
+feature. Reporting all four features together as "timing" was the second error:
+it understated recency, which ranks 2nd, and overstated liquidity, which does
+not crack 22nd. Both figures are in `out/model_report.json` now and checked by
+CHT-3. The superseded values are recorded in that file rather than quietly
+dropped.
 
 ### 184 of 188 priors are asserted, not sourced
 
@@ -207,6 +210,24 @@ we set the number that decides that. Every flip is B2 climbing rather than OURS
 falling, which is a mild consolation and not a rebuttal. Eleven of fourteen
 members hold across the full 16x range. (SPEC §15.2, A95, A99)
 
+### The margin narrows with sample size
+
+At 2,000 cases OURS leads by 2.25 points; at 10,000 by 1.72. B2 gains more from
+the larger sample. The reported result is the 10,000-case run; the smaller batch
+flattered us, and both figures are in `out/metrics.json`.
+
+Per-class figures are less stable still. `ambiguous` moves from **+2.3 points to
+−2.9** between the two runs — a class we reported winning at 2,000 cases is a
+class we lose at 10,000. A per-class number at 2,000 cases is not reportable,
+and the CP13 README reported six of them.
+
+**What it costs.** Two things. First, the headline margin is small enough that a
+5x change in sample size moves it by a quarter of its own size, so it should be
+read as "comparable recovery" rather than as a clear win — the contact ratio is
+the robust part of the result, not the recovery gap. Second, we do not know
+where it settles: 10,000 is the largest batch we run, so we can say the margin
+shrank between our two sizes but not that it has converged.
+
 ### Seven of fourteen swept parameters leave OURS completely unmoved
 
 Not because the policy is robust. Because it makes 36 contacts in 10,000 cases,
@@ -244,8 +265,25 @@ was oriented around, and it is real but small: 138 cases for OURS. The larger
 error is 976 settlements the agent never learned about, and the harm from those
 is SF-2 — chasing someone who has already paid. Our SF-2 is 1 against the fixed
 ladder's 86, but that is a consequence of contacting 36 times rather than 14,027,
-not of the auditor being good at finding them. A system with our observability
-and B2's contact volume would produce B2's SF-2 count.
+not of the auditor being good at finding them. The reconciliation code is
+identical across arms. A system with our observability and B2's contact volume
+would produce B2's SF-2 count.
+
+The count on its own is also a misleading way to compare arms, and we report the
+decomposition instead. SF-2 needs a settlement the agent never heard about *and*
+a contact after it. B3's 35 looks better than B2's 86 largely because it acts so
+much more that more of its settlements get reported at all: its blind set is 563
+against B2's 1,112. Fewer opportunities, not mostly more discipline.
+
+The comparison that does survive is OURS against B2, whose blind sets are almost
+identical — 1,114 and 1,112. Facing the same ignorance about the same number of
+customers, the ladder chased 7.7% of them and we chased 0.1%.
+
+The share is not stable across sample size either. At 2,000 cases B3 converts a
+*higher* share of its blind set than B2 (9.3% against 7.8%) and at 10,000 a
+lower one (6.2% against 7.7%). Only the blind-set sizes are robust, so the
+opportunity half of the decomposition carries the claim and the conversion half
+does not. `out/model_report.json` carries the split.
 
 ### The silent-failure auditor is validated only in simulation
 

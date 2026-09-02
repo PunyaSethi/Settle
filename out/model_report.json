@@ -1,0 +1,130 @@
+{
+  "about": "Figures the README quotes that out/metrics.json does not produce. Written by scripts run against committed code; every number here is measured, and CHT-3 checks the README against it.",
+  "cases": 10000,
+  "generated_at": "2026-09-02T17:23:57.115175+00:00",
+  "model": "model_cba710e51c27.pkl",
+  "retry_timing": {
+    "liquidity": {
+      "feature_ranks": {
+        "day_of_month_at_dispatch": {
+          "importance": 0.00015194779160631055,
+          "rank": 22
+        },
+        "days_to_month_start": {
+          "importance": -0.00022244871822714175,
+          "rank": 40
+        },
+        "in_liquidity_window": {
+          "importance": 0.0,
+          "rank": 34
+        }
+      },
+      "hypothesis": "retries near payday recover more",
+      "rank_best": 22,
+      "rank_worst": 40,
+      "sensitivity": {
+        "holds_everywhere": true,
+        "margin_span_points": 0.3000000000000058,
+        "margins": [
+          0.02400000000000002,
+          0.02400000000000002,
+          0.02250000000000002,
+          0.02150000000000002,
+          0.020999999999999963
+        ],
+        "member": "world.liquidity_window_days",
+        "multiples": [
+          0.25,
+          0.5,
+          1.0,
+          2.0,
+          4.0
+        ],
+        "sweep_cases": 2000
+      },
+      "verdict": "withdrawn \u2014 SPEC \u00a710.1, A83"
+    },
+    "n_features": 46,
+    "n_offsets": 8,
+    "offsets": [
+      0,
+      6,
+      18,
+      30,
+      48,
+      72,
+      120,
+      168
+    ],
+    "recency": {
+      "feature_ranks": {
+        "days_since_last_attempt": {
+          "importance": 0.009998074527674866,
+          "rank": 2
+        }
+      },
+      "hypothesis": "how long since the last attempt matters",
+      "offset_spread": {
+        "max": 0.35316791206668974,
+        "median": 0.06047102236159774,
+        "n_retry_rows": 1770,
+        "p90": 0.12504227470954
+      },
+      "rank_best": 2,
+      "verdict": "survived"
+    },
+    "summary": "Two hypotheses were tested and they came apart. Liquidity timing is withdrawn; recency survived. Reporting them together as one set of 'timing features' understated one and overstated the other.",
+    "superseded_figures": {
+      "median_spread_points": 3.7,
+      "n_features": 45,
+      "note": "What the README carried until CP13.1, from a training log predating A93. Recorded so the correction is auditable rather than a silent edit.",
+      "rank_range": "26-37"
+    }
+  },
+  "seed": 42,
+  "sf2_attribution": {
+    "arms": {
+      "B0": {
+        "blind_set": 2251,
+        "contacts": 0,
+        "dispatches": 0,
+        "settled": 2251,
+        "sf2": 0,
+        "sf2_share_of_blind_set": 0.0
+      },
+      "B1": {
+        "blind_set": 1608,
+        "contacts": 897,
+        "dispatches": 7052,
+        "settled": 3655,
+        "sf2": 0,
+        "sf2_share_of_blind_set": 0.0
+      },
+      "B2": {
+        "blind_set": 1112,
+        "contacts": 14027,
+        "dispatches": 33027,
+        "settled": 4943,
+        "sf2": 86,
+        "sf2_share_of_blind_set": 0.07733812949640288
+      },
+      "B3": {
+        "blind_set": 563,
+        "contacts": 24780,
+        "dispatches": 68417,
+        "settled": 6494,
+        "sf2": 35,
+        "sf2_share_of_blind_set": 0.06216696269982238
+      },
+      "OURS": {
+        "blind_set": 1114,
+        "contacts": 36,
+        "dispatches": 33995,
+        "settled": 5122,
+        "sf2": 1,
+        "sf2_share_of_blind_set": 0.0008976660682226212
+      }
+    },
+    "summary": "SF-2 needs a settlement the agent never heard about and a contact after it. The blind set is the opportunity; the share converted is the behaviour. The reconciliation code is identical across arms, so any difference is behavioural."
+  }
+}

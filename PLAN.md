@@ -35,7 +35,8 @@ of what shipped, not a retrospective invented after the fact.
 | CP12.1 | `1444842` | Self-verifying artefact, then done with Razorpay |
 | CP12.2 | `1aa5de8` | Three loose ends, then charts |
 | CP13 | `4be14ea` | Charts and README — the first thing a judge reads |
-| CP13.1 | this | 10k run, the class breakdown in results, the reconciliation finding |
+| CP13.1 | `e7d93e8` | 10k run, the class breakdown in results, the reconciliation finding |
+| CP13.2 | this | Timing figures corrected, the two hypotheses split |
 
 ## CP12 — Razorpay test mode, real at the edges
 
@@ -201,5 +202,55 @@ Reported-minus-reconciled is negative for every arm. The auditor was built
 expecting overstatement — money claimed and never settled — and the measured
 error runs the other way. The concrete harm is not a wrong dashboard number; it
 is customers who had already paid and were still being chased.
+
+## CP13.2 — the two timing hypotheses, separated
+
+No code changed. Documents, one new artefact, and two corrections.
+
+A83's "retry timing" was two hypotheses reported as one, and separating them
+changes what each says. LIQUIDITY TIMING — retries near payday recover more —
+was the stated differentiator and it is dead: the three features rank 22, 34 and
+40 of 46, and `world.liquidity_window_days` moves the headline 0.30 points
+across the full 0.25x–4x sweep, having been a REQUIRED sweep member since CP2.3
+precisely because we expected it to matter. RECENCY survived:
+`days_since_last_attempt` ranks 2 of 46, and the probability moves a median 6.0
+points across the eight offsets. Reporting them together understated the second
+and overstated the first. A83's withdrawal stands, unchanged in scope.
+
+`out/model_report.json` carries both, plus the superseded figures, so the
+correction is auditable rather than a silent edit.
+
+### Two prescribed numbers did not survive checking
+
+The feature-to-rank pairing was transposed — `day_of_month_at_dispatch` is 22
+and `days_to_month_start` is 40, not the reverse — and the liquidity sweep moves
+the headline 0.30 points, not 0.6. Both corrected before being written. The
+conclusion is unaffected and is stronger for the second.
+
+### SF-2's bare count was hiding the mechanism
+
+F23's prescribed explanation for B3 was that it "exhausts contact budgets
+earlier". It does not: B3 makes 24,780 contacts against B2's 14,027, and it runs
+in OBSERVE where the gates that impose a budget do not bind.
+
+Measured instead. SF-2 needs a settlement the agent never heard about AND a
+contact after it, so the blind set is the denominator. B3's blind set is 384
+against B2's 984, because acting more means more settlements get reported at
+all. Per blind case B3 is worse — 9.1% against 8.7%. Fewer opportunities, not
+more discipline.
+
+OURS has the largest blind set of any acting arm, 976, and converts 0.1% of it.
+That is a better statement of the restraint claim than the count of 1.
+
+### The margin narrows with sample size
+
+2.25 points at 2,000 cases, 1.72 at 10,000, with B2 gaining more. Per-class is
+less stable still: `ambiguous` moves from +2.3 to −2.9, so the six per-class
+figures CP13 reported at 2,000 cases were not reportable. Recorded in Known
+Limitations with what it costs — the contact ratio is the robust half of the
+result, the recovery gap is not.
+
+§19 is rewritten once and frozen at nine sections. It had been amended in three
+consecutive checkpoints.
 
 Next is D5: the three-screen viewer and the voice clips.

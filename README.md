@@ -71,17 +71,34 @@ That is SF-2, and it is where restraint stops being an efficiency argument:
 | B1 single retry | 0 |
 | B0 do nothing | 0 |
 
-Every arm's reported-minus-reconciled is negative, because the observability
-layer drops webhooks for all of them equally. What differs is what an arm *does*
-with the ignorance. B2 has the same blind spot and 14,027 contacts to spend into
-it, so 86 people who had already paid got chased anyway. OURS has the same blind
-spot and 36 contacts, so one did. B1's zero is not virtue — it contacts 897
-times but stops after a single retry, before the settlements land.
+86 customers paid B2 and were contacted again anyway. OURS did this once. That
+gap follows from OURS making 36 contacts in total, not from a better auditor:
+the reconciliation code is identical across arms.
 
-B3 having fewer SF-2 than B2 is not a point in its favour either. It contacts so
-relentlessly that it recovers more cases outright, which leaves fewer settled
-customers available to be wrongly chased; its 4,006 out-of-window contacts and
-401 post-opt-out contacts are the cost of that.
+B3's 35 is lower than B2's 86, and it is not restraint — B3 makes 24,780
+contacts against B2's 14,027. SF-2 needs two things, a settlement the agent never
+heard about *and* a contact after it, so the count alone conflates being rarely
+in a position to make the mistake with being disciplined about not making it.
+Split apart:
+
+| arm | settled | blind set — settled, never reported | SF-2 | share of blind set |
+|---|---|---|---|---|
+| **OURS** | 5,122 | **1,114** | **1** | **0.1%** |
+| B2 | 4,943 | 1,112 | 86 | 7.7% |
+| B3 | 6,494 | 563 | 35 | 6.2% |
+| B1 | 3,655 | 1,608 | 0 | 0.0% |
+| B0 | 2,251 | 2,251 | 0 | 0.0% |
+
+B3's advantage over B2 is mostly opportunity, not judgement: acting more means
+more of its settlements get reported at all, so its blind set is half the size.
+
+**OURS and B2 have almost identical blind sets — 1,114 against 1,112 — and that
+is the comparison worth making.** Facing the same ignorance about the same number
+of customers, the fixed ladder chased 7.7% of them and `settle` chased 0.1%. The
+observability is the same; what differs is what each does when it cannot see.
+
+B1's zero is not virtue. It has the second-largest blind set and stops after one
+retry, before the settlements land.
 
 ### Restraint
 
@@ -228,6 +245,24 @@ rather than the flattering one.
 
 ---
 
+### Two timing hypotheses, and which one died
+
+Two timing hypotheses were tested and they came apart.
+
+**LIQUIDITY TIMING** — that retries near payday recover more — was the stated
+differentiator. It is dead. `day_of_month_at_dispatch`, `in_liquidity_window`
+and `days_to_month_start` rank 22, 34 and 40 of 46 by permutation importance.
+`world.liquidity_window_days` moves the headline 0.30 points across a 16x sweep.
+The claim is withdrawn.
+
+**RECENCY** — how long since the last attempt — survived.
+`days_since_last_attempt` ranks 2 of 46. Predicted probability moves a median
+6.0 points across the eight declared offsets over 1,770 retry rows.
+
+Reporting these together as "timing features rank 26-37" understated one and
+overstated the other. Both figures now come from `out/model_report.json` and are
+verified by CHT-3.
+
 ## 4. Reproduce it
 
 ```bash
@@ -355,13 +390,10 @@ The five that would change how you read the numbers above:
    detector catches N% *in a world where we know the answer*", and nothing
    stronger. It has never been pointed at live money.
 
-2. **Retry timing was a hypothesised differentiator and it is not.** We tested it
-   and withdrew the claim. The three liquidity features rank 22nd, 34th and 40th
-   of 46 by permutation importance. The probability does move across the eight
-   offsets — median spread 6.0 percentage points over 1,770 retry rows — but not
-   because it has found paydays. `days_since_last_attempt` ranks 2nd, and that
-   is recency rather than liquidity: a different hypothesis, and the one that
-   survived.
+2. **Two timing hypotheses were tested and they came apart.** Liquidity timing —
+   that retries near payday recover more — was the stated differentiator, and it
+   is dead. Recency survived. See below; reporting them together as one set of
+   "timing features" understated one and overstated the other.
 
 3. **The headline flips at 4x on `contact_response.rate.*`**, an asserted number
    that we set, in the direction a sceptical reader would guess.

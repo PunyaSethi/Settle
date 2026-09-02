@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CHARTS_DIR = REPO_ROOT / "out" / "charts"
 METRICS = REPO_ROOT / "out" / "metrics.json"
 README = REPO_ROOT / "README.md"
+MODEL_REPORT = REPO_ROOT / "out" / "model_report.json"
 
 CHART_FILES = (
     "recovery_vs_contacts.png",
@@ -255,7 +256,7 @@ def _artefact_haystack() -> set[str]:
             for item in value:
                 add(item)
 
-    for path in (METRICS, REPO_ROOT / "out" / "razorpay_demo.json"):
+    for path in (METRICS, MODEL_REPORT, REPO_ROOT / "out" / "razorpay_demo.json"):
         if path.exists():
             add(json.loads(path.read_text(encoding="utf-8")))
 
@@ -380,37 +381,97 @@ def test_CHT_3_the_readme_headline_matches_the_artefact_exactly() -> None:
         assert (CHARTS_DIR / name).exists(), f"{name} is referenced but not committed"
 
 
-@needs_metrics
-def test_CHT_3_the_retry_timing_figures_come_from_the_artefact() -> None:
-    """F21. Until CP13.1 the withdrawn-timing numbers existed only in train.py's
-    stdout, so the README was quoting a log a reader could not check. They are
-    recomputed into the artefact now, and this asserts the README uses those.
+@pytest.mark.skipif(not MODEL_REPORT.exists(), reason="out/model_report.json not generated")
+def test_CHT_3_the_two_timing_hypotheses_are_reported_separately() -> None:
+    """F22. A83's "retry timing" was two hypotheses reported as one.
 
-    It also catches the reason F21 mattered: the figures the README carried were
-    stale, from a training log predating A93.
+    Liquidity timing was the stated differentiator and is withdrawn; recency
+    survived. Reporting them together understated one and overstated the other,
+    so this asserts both documents carry the split and the current figures —
+    not the pre-A93 ones the README carried until CP13.1.
     """
-    data = load_metrics()
-    timing = data["retry_timing"]
-    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    report = json.loads(MODEL_REPORT.read_text(encoding="utf-8"))
+    timing = report["retry_timing"]
+    liquidity, recency = timing["liquidity"], timing["recency"]
+
+    readme = README.read_text(encoding="utf-8")
     limits = (REPO_ROOT / "KNOWN_LIMITATIONS.md").read_text(encoding="utf-8")
 
-    assert timing["spread"]["median"] is not None
-    assert timing["spread"]["n_retry_rows"] > 0
-    assert timing["liquidity_feature_ranks"], "no liquidity features ranked"
-
-    median_points = f"{timing['spread']['median'] * 100:.1f}"
-    best = timing["liquidity_rank_best"]
-    worst = timing["liquidity_rank_worst"]
+    ranks = sorted(v["rank"] for v in liquidity["feature_ranks"].values())
+    recency_rank = min(v["rank"] for v in recency["feature_ranks"].values())
     total = timing["n_features"]
+    span = liquidity["sensitivity"]["margin_span_points"]
+    median_points = f"{recency['offset_spread']['median'] * 100:.1f}"
+    rows = f"{recency['offset_spread']['n_retry_rows']:,}"
 
     for document, name in ((readme, "README.md"), (limits, "KNOWN_LIMITATIONS.md")):
-        assert median_points in document, (
-            f"{name} does not quote the recomputed median spread {median_points}"
+        # The two verdicts must be distinguishable, not merged into "timing".
+        assert "LIQUIDITY" in document.upper(), f"{name} does not name the liquidity hypothesis"
+        assert "RECENCY" in document.upper(), f"{name} does not name the recency hypothesis"
+
+        for rank in ranks:
+            assert str(rank) in document, f"{name} missing liquidity rank {rank}"
+        assert f"{recency_rank} of {total}" in document, (
+            f"{name} does not report the recency rank as {recency_rank} of {total}"
         )
-        assert f"{best}" in document and f"{worst}" in document, (
-            f"{name} does not quote the recomputed liquidity ranks {best}-{worst}"
+        assert f"{span:.2f}" in document, (
+            f"{name} does not quote the liquidity sweep span {span:.2f}"
         )
-        assert f"{total}" in document, f"{name} does not quote the feature count {total}"
+        assert median_points in document and rows in document, (
+            f"{name} does not quote the offset spread {median_points} over {rows} rows"
+        )
+
+    # Each liquidity feature is named beside its own rank, in order. Guards the
+    # transposition CP13.2 found in its own prescribed text: the ranks were
+    # right and the names attached to them were not.
+    ordered = sorted(liquidity["feature_ranks"].items(), key=lambda kv: kv[1]["rank"])
+    names_in_order = [name for name, _ in ordered]
+    positions = [readme.index(f"`{name}`") for name in names_in_order]
+    assert positions == sorted(positions), (
+        "README lists the liquidity features out of rank order, so a reader "
+        f"pairing them positionally gets the wrong rank: expected {names_in_order}"
+    )
+
+    # The superseded figures are recorded, not silently dropped.
+    superseded = timing["superseded_figures"]
+    assert superseded["n_features"] != total
+    assert str(superseded["median_spread_points"]) in limits, (
+        "KNOWN_LIMITATIONS.md does not record what these figures replaced"
+    )
+
+
+@pytest.mark.skipif(not MODEL_REPORT.exists(), reason="out/model_report.json not generated")
+def test_CHT_3_sf2_is_decomposed_not_just_counted() -> None:
+    """F23. The bare count conflates opportunity with judgement.
+
+    SF-2 needs a settlement the agent never heard about AND a contact after it.
+    Reporting only the outcome makes B3 look disciplined when it is mostly just
+    rarely in a position to make the mistake.
+    """
+    report = json.loads(MODEL_REPORT.read_text(encoding="utf-8"))
+    arms = report["sf2_attribution"]["arms"]
+    readme = README.read_text(encoding="utf-8")
+
+    for name in ("OURS", "B2", "B3"):
+        row = arms[name]
+        assert f"{row['blind_set']:,}" in readme, (
+            f"README does not report {name}'s blind set ({row['blind_set']:,}); "
+            "without it the SF-2 counts cannot be compared"
+        )
+        assert f"{row['sf2_share_of_blind_set'] * 100:.1f}%" in readme, (
+            f"README does not report {name}'s share of its blind set"
+        )
+
+    # The attribution sentence, and that it is attached to the number.
+    assert "the reconciliation code is identical across arms" in readme.lower()
+    assert str(arms["B2"]["sf2"]) in readme and str(arms["OURS"]["contacts"]) in readme
+
+    # OURS and B2 face near-identical blind sets, which is what makes the
+    # comparison a statement about behaviour rather than about luck.
+    assert abs(arms["OURS"]["blind_set"] - arms["B2"]["blind_set"]) < 50, (
+        "OURS and B2 no longer have comparable blind sets, so the README's "
+        "central SF-2 comparison needs rewriting"
+    )
 
 
 def test_CHT_3_known_limitations_states_a_cost_for_every_entry() -> None:

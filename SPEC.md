@@ -1423,7 +1423,7 @@ database.
   CP12, so the file CC owns was the file CC was never permitted to touch, and it
   sat at `(pending)` for nine checkpoints. Added at CP12.1.
 
-## 19. README order — fixed
+## 19. README order — FROZEN at nine
 
 1. Headline metrics table, including silent failure rate
 2. Architecture diagram
@@ -1435,24 +1435,24 @@ database.
 8. Next steps
 9. Simulated at scale, real at the edges
 
-Sections 8 and 9 were added at CP13.1. The order was fixed before CP12 existed,
-and the Razorpay edge is now a claim the README has to make: a judge who reads
-seven sections of simulated results and finds no statement of what is real has
-been left to work it out. Extending the list is the correct move; deleting the
-content to satisfy a count set before the content existed is not.
+The original seven were fixed before CP12 and CP13 existed, and both produced
+content the list had no slot for. Sections 8 and 9 were added at CP13.1 and the
+count is now closed: changing it again requires an amendment note arguing the
+case, not a checkpoint noticing it has something extra to say.
 
-Next steps follows known limitations because the two are one thought — what is
-wrong, then what we would do about it — and because the strongest item on it
-comes from a result rather than from a wish: the margin is one decline class, so
-the hybrid is the obvious experiment and we have not run it.
-
-The edge sits last on purpose. The batch is the result and the edge is the
+Section 9 sits last on purpose. The batch is the result and the edge is the
 credibility check on it, so a reader meets the numbers, then the limits on them,
 and only then the one object that is not simulated. Leading with it would sell a
 single test-mode payment as the achievement.
 
-Known limitations moved to `KNOWN_LIMITATIONS.md` when it outgrew a section.
-Section 7 is the five entries that change how the numbers read, and a link.
+Section 8 follows section 7 because the two are one thought — what is wrong,
+then what we would do about it — and because its strongest item comes from a
+measurement rather than a wish: the margin is one decline class, so the hybrid
+is the obvious experiment and it has not been run.
+
+Known limitations live in `KNOWN_LIMITATIONS.md`, which section 7 summarises and
+links. It outgrew a section, and a limitations list competing for space with a
+results table loses.
 
 ## 20. Cost constants — ASSERTED, pending sourcing
 
@@ -1733,7 +1733,11 @@ Resolved:
 - 2026-09-02 — A116: §14.4 — incremental recovery is reported per decline class as well as in aggregate. The aggregate hides the shape: the entire OURS margin is `auth_abandoned` (+48.9 points) and it loses to B2 on three of six classes including the largest. Chart 3 draws the losses at the same weight as the wins.
 - 2026-09-02 — A117: §14.4 — B3's headline recovery is reported next to its 889 compliance violations and 52.70% silent-failure rate wherever it appears. B3 recovers more than OURS and runs in OBSERVE; printing the first number without the second two would misrepresent an unguarded upper bound as a competitor.
 - 2026-09-02 — A118: §3, §14.4 — the headline is measured at 10,000 cases, the batch size §3 has specified since CP0. Every README number moves to it. The 2,000-case figures are kept in `out/metrics.json`'s `comparison` block: the margin narrows from 2.25 points to 1.72 between the two scales, and a reader who has seen both should be able to see the divergence rather than guess which is current.
-- 2026-09-02 — A119: §19 extended to nine sections. Next steps follows known limitations because the two are one thought, and because its strongest item comes from a result rather than a wish. Simulated-at-scale sits last: the batch is the result and the edge is the credibility check on it.
+- 2026-09-02 — A119: §19 extended to nine sections. Superseded by A123, which rewrites §19 once and closes the count.
 - 2026-09-02 — A120: §10.1 — the A83 retry-timing figures are computed into `out/metrics.json` by `settle.eval.report.timing_block` rather than quoted from `train.py` stdout, and CHT-3 verifies them. The figures the README carried until CP13.1 — 3.7-point median spread, ranks 26-37 of 45 — reproduce none of the current values and predate A93. `train.py`'s four "timing features" are two hypotheses: the three liquidity features rank 22, 34 and 40 of 46, while `days_since_last_attempt` ranks 2 and measures recency. A83's withdrawal stands; the numbers behind it are now auditable.
 - 2026-09-02 — A121: §7 — the auditor's dominant measured error is understatement, not overstatement. Reported-minus-reconciled is negative for every arm, and the harm is SF-2: OURS believed 4,146 cases recovered when 5,122 had settled, so 976 settlements never reached the agent. SF-2 is reported per arm alongside it, with the statement that OURS's 1 against B2's 86 follows from contacting 36 times rather than 14,027 and not from the auditor being better at finding them.
 - 2026-09-02 — A122: `out/charts/metrics.json` moved to `out/metrics.json` with its own `.gitignore` negation. A data file was living in an images directory because that directory carried the only negation available when it was written.
+- 2026-09-02 — A123: §19 rewritten once and FROZEN at nine sections, superseding A114 and A119. It had been amended in three consecutive checkpoints because the original seven predate the content CP12 and CP13 produced. Changing the count again now requires an amendment arguing the case rather than a checkpoint noticing it has something extra to say.
+- 2026-09-02 — A124: §10.1 — A83's two timing hypotheses are separated, because they came apart and reporting them together misstated both. LIQUIDITY timing — retries near payday recover more — is withdrawn: `day_of_month_at_dispatch`, `in_liquidity_window` and `days_to_month_start` rank 22, 34 and 40 of 46 by permutation importance, and `world.liquidity_window_days` moves the headline margin 0.30 points across the full 0.25x-4x sweep. RECENCY survived: `days_since_last_attempt` ranks 2 of 46, and predicted probability moves a median 6.0 points across the eight declared offsets over 1,770 retry rows. A83's withdrawal stands and its scope is unchanged — liquidity, not recency. Figures in `out/model_report.json`, verified by CHT-3.
+- 2026-09-02 — A125: §7 — SF-2 is decomposed into opportunity and conversion rather than reported as a bare count. An arm's SF-2 needs a settlement it never heard about AND a contact after it, so the blind set is the denominator that matters. Reporting the outcome alone conflates "rarely in a position to make the mistake" with "disciplined about not making it". Measured per arm in `out/model_report.json`.
+- 2026-09-02 — A126: §14.3 — the headline margin narrows with sample size: 2.25 points at 2,000 cases, 1.72 at 10,000, with B2 gaining more from the larger sample. Per-class figures are less stable still — `ambiguous` moves from +2.3 to -2.9 between the two — so a per-class number at 2,000 cases is not reportable. The 10,000-case run is the reported result and both are in `out/metrics.json`.
