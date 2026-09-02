@@ -1,10 +1,10 @@
 # settle
 
-**9 contacts. 2,000 cases. More money back than a fixed dunning ladder that sent 2,852.**
+**36 contacts. 10,000 cases. More money back than a fixed dunning ladder that sent 14,027.**
 
 `settle` is a recovery agent for failed subscription mandates that is correct
 when it cannot trust what it is told about outcomes. It is **simulated at scale
-and real at the edges**: the 2,000-case batch below is synthetic and seeded, and
+and real at the edges**: the 10,000-case batch below is synthetic and seeded, and
 one payment link in this repo — `plink_TWr7e2EFJ8ITvn` — is a real Razorpay
 test-mode object that was created over the network, paid with a test card, and
 reported back by a signature-verified webhook.
@@ -19,29 +19,29 @@ to produce.
 
 ## 1. Headline metrics
 
-2,000 cases, seed 42, 60-day observation horizon. Incremental means net of the
-B0 do-nothing arm's natural recovery — a case that cures on its own is not ours
-to claim.
+10,000 cases, seed 42, 60-day observation horizon — the batch size SPEC §3
+specifies. Incremental means net of the B0 do-nothing arm's natural recovery: a
+case that cures on its own is not ours to claim.
 
 | | **OURS** | B2 fixed ladder | B1 single retry | B3 max pressure | B0 do nothing |
 |---|---|---|---|---|---|
-| Incremental recovery rate | **27.90%** | 25.65% | 12.15% | 41.65% | 0.00% |
-| Incremental recovery (₹) | **391,664** | 372,686 | 176,029 | 565,144 | 0 |
-| Contacts | **9** | 2,852 | 177 | 5,067 | 0 |
-| Contacts per case | **0.0045** | 1.426 | 0.0885 | 2.5335 | 0 |
-| Dispatches (all actions) | 6,993 | 6,576 | 1,388 | 13,737 | 0 |
-| Cost per ₹100 recovered | **₹0.0895** | ₹0.2714 | ₹0.0644 | ₹4.7703 | — |
-| **Silent failure rate** | **1.45%** | 5.30% | 2.30% | 52.70% | 0.00% |
-| **Reported minus reconciled** | **−200 cases** | −194 | −293 | −71 | −450 |
-| Compliance violations | **0** | 0 | 0 | **889** | 0 |
+| Incremental recovery rate | **28.37%** | 26.65% | 13.86% | 41.90% | 0.00% |
+| Incremental recovery (₹) | **1,909,817** | 1,812,714 | 954,733 | 2,784,579 | 0 |
+| Contacts | **36** | 14,027 | 897 | 24,780 | 0 |
+| Contacts per case | **0.0036** | 1.4027 | 0.0897 | 2.4780 | 0 |
+| Dispatches (all actions) | 33,995 | 33,027 | 7,052 | 68,417 | 0 |
+| Cost per ₹100 recovered | **₹0.0892** | ₹0.2765 | ₹0.0593 | ₹4.2577 | — |
+| **Silent failure rate** | **1.75%** | 5.04% | 2.26% | 51.87% | 0.00% |
+| **Reported minus reconciled** | **−976 cases** | −984 | −1,527 | −384 | −2,251 |
+| Compliance violations | **0** | 0 | 0 | **4,407** | 0 |
 | Gate mode | ENFORCE | ENFORCE | ENFORCE | OBSERVE | ENFORCE |
 
 ![Recovery against contacts](out/charts/recovery_vs_contacts.png)
 
 **B3 recovers more than we do, and it is not a competitor.** It runs in OBSERVE:
-the gates are evaluated and their verdicts do not bind. It buys 41.65% with 889
-compliance violations — 810 contacts outside the permitted window, 79 after an
-opt-out — and a 52.70% silent failure rate. It is the upper bound on what an
+the gates are evaluated and their verdicts do not bind. It buys 41.90% with 4,407
+compliance violations — 4,006 contacts outside the permitted window, 401 after an
+opt-out — and a 51.87% silent failure rate. It is the upper bound on what an
 unguarded system extracts, printed so the cost of the guardrails is visible
 rather than assumed away.
 
@@ -49,22 +49,43 @@ rather than assumed away.
 
 **Silent failure rate** is what the reconciliation pass finds by comparing the
 ledger against what the money actually did, independently of the executor.
-OURS's 1.45% is 23 cases marked recovered that never settled (SF-1) and 6 that
-settled and then reversed (SF-7). B2's 5.30% includes 17 customers who had
-already paid and were contacted again (SF-2) and 57 promises that passed their
-date with no follow-up (SF-4). OURS has zero of both.
+OURS's 1.75% is 138 cases marked recovered that never settled (SF-1) and 36 that
+settled and then reversed (SF-7). What it is not is SF-4: 255 promises passed
+their date with no follow-up under the fixed ladder, and none under OURS.
 
-**Reported minus reconciled** is the gap between what the agent believed and
-what happened. Every arm's is negative, and that is the thesis in one number:
-OURS believed 815 cases recovered; 1,015 actually did. **200 settlements never
-reached the agent at all.** A system that trusted its own webhook feed would
-under-report its own recovery by 20% and keep chasing 200 people who had already
-paid. Ours does not, because reconciliation — not the ledger — decides what
-recovered.
+**Reported minus reconciled — and the auditor was pointed the wrong way.**
+
+The silent-failure auditor was built expecting overstatement: money claimed and
+never settled. The measured error runs the other way. 976 settlements never
+reached the agent, so OURS believed it had recovered 4,146 cases when 5,122 had
+settled. The concrete harm is not a wrong number on a dashboard — it is 976
+customers who had already paid and were still being chased.
+
+That is SF-2, and it is where restraint stops being an efficiency argument:
+
+| arm | SF-2 — settled, never reported, contacted again |
+|---|---|
+| **OURS** | **1** |
+| B2 fixed ladder | 86 |
+| B3 max pressure | 35 |
+| B1 single retry | 0 |
+| B0 do nothing | 0 |
+
+Every arm's reported-minus-reconciled is negative, because the observability
+layer drops webhooks for all of them equally. What differs is what an arm *does*
+with the ignorance. B2 has the same blind spot and 14,027 contacts to spend into
+it, so 86 people who had already paid got chased anyway. OURS has the same blind
+spot and 36 contacts, so one did. B1's zero is not virtue — it contacts 897
+times but stops after a single retry, before the settlements land.
+
+B3 having fewer SF-2 than B2 is not a point in its favour either. It contacts so
+relentlessly that it recovers more cases outright, which leaves fewer settled
+customers available to be wrongly chased; its 4,006 out-of-window contacts and
+401 post-opt-out contacts are the cost of that.
 
 ### Restraint
 
-> OURS dispatches 6,993 actions against B2's 6,576. It is more active and less
+> OURS dispatches 33,995 actions against B2's 33,027. It is more active and less
 > intrusive. Far fewer CONTACTS, not less work.
 
 The restraint is in *contacts*, not in effort. `settle` retries, switches rails
@@ -73,23 +94,33 @@ people, because in this world messaging them mostly is not worth what it costs.
 
 **That is a claim about contacts, not about our contacts being better.** Seven of
 the fourteen swept priors leave OURS completely unmoved, because a policy making
-9 contacts in 2,000 cases cannot be affected by any prior describing what happens
-when you contact someone. A reader who takes the sensitivity result as evidence
-of a robust *contact policy* has read it wrong.
+36 contacts in 10,000 cases cannot be affected by any prior describing what
+happens when you contact someone. A reader who takes the sensitivity result as
+evidence of a robust *contact policy* has read it wrong.
 
 ### Where it wins, and where it loses
 
 ![Incremental recovery by decline class](out/charts/by_decline_class.png)
 
-The entire margin is one class. `auth_abandoned` — where the recovery path is a
-rail switch, not a retry — goes to OURS by **48.9 points**. It **loses** to the
-fixed ladder on three of six classes, including the largest: `dead_instrument`
-by 10.7 points, `transient` by 3.8, and `time_shiftable` — 899 of 2,000 cases —
-by 3.4.
+The margin is concentrated. OURS beats the fixed ladder by 47.7 points on
+auth_abandoned and loses on dead_instrument (-9.2), ambiguous (-2.9),
+time_shiftable (-2.9) and transient (-2.7). The aggregate 28.37% against 26.65%
+hides that completely, which is why the per-class chart is here rather than in an
+appendix.
 
-A single incremental rate hides that shape entirely. The chart is here rather
-than in an appendix because a results section that shows only the wins is a
-limitations section displaced into a picture.
+| decline class | cases | OURS | B2 | difference |
+|---|---|---|---|---|
+| `auth_abandoned` | 1,095 | 49.95% | 2.28% | **+47.67 pts** |
+| `terminal` | 314 | 0.00% | 0.00% | 0.00 |
+| `transient` | 1,228 | 33.31% | 35.99% | **−2.69** |
+| `time_shiftable` | 4,461 | 37.48% | 40.33% | **−2.85** |
+| `ambiguous` | 1,232 | 16.96% | 19.89% | **−2.92** |
+| `dead_instrument` | 1,670 | 0.00% | 9.22% | **−9.22** |
+
+It loses on four of the six classes, including `time_shiftable`, which is 4,461
+of the 10,000 cases. The whole result rests on one class where the recovery path
+is a rail switch rather than a retry, and where the ladder — which does not
+switch rails — recovers almost nothing.
 
 ### Sensitivity
 
@@ -163,7 +194,7 @@ Three rules hold the shape:
 
 ![Reliability diagram](out/charts/reliability.png)
 
-The shipped estimator is a gradient-boosted model over 45 features, held out
+The shipped estimator is a gradient-boosted model over 46 features, held out
 **by case** rather than by row — a row-wise split would leak, because fifteen
 decisions from one case share its hidden recoverability. ECE **0.0392**, Brier
 **0.2048** over 27,353 covered rows.
@@ -204,18 +235,23 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # the batch, the arms, the reconciliation, every headline number
-python -m settle.eval.report --cases 2000 --seed 42
+python -m settle.eval.report --cases 10000 --seed 42 --compare-cases 2000
 
 # the four charts, from that artefact
 python -m settle.eval.charts
 ```
 
-`report` writes `out/charts/metrics.json`. **Every number in this README comes
-from that file**, and test `CHT-3` asserts it — a figure with no artefact behind
+`report` writes `out/metrics.json`. **Every number in this README comes from
+that file**, and test `CHT-3` asserts it — a figure with no artefact behind
 it does not go in. That is not tidiness: this project's whole claim is that a
 recovery number is worth what the evidence behind it is worth, and a README
 quoting an unbacked rate would be committing the error it was written to
 criticise.
+
+`--compare-cases 2000` also records the 2,000-case headline rows, because the
+result moves with batch size and a reader who has seen both should be able to see
+by how much rather than guess which is current. OURS goes 27.90% → 28.37% and B2
+25.65% → 26.65% between the two; the margin narrows from 2.25 points to 1.72.
 
 The full suite, including the sensitivity sweep and the 10,000-case runs:
 
@@ -320,9 +356,12 @@ The five that would change how you read the numbers above:
    stronger. It has never been pointed at live money.
 
 2. **Retry timing was a hypothesised differentiator and it is not.** We tested it
-   and withdrew the claim. Median spread across the eight offsets is 3.7
-   percentage points; the timing features rank 26th to 37th of 45. A coarse
-   signal exists; a liquidity curve does not.
+   and withdrew the claim. The three liquidity features rank 22nd, 34th and 40th
+   of 46 by permutation importance. The probability does move across the eight
+   offsets — median spread 6.0 percentage points over 1,770 retry rows — but not
+   because it has found paydays. `days_since_last_attempt` ranks 2nd, and that
+   is recency rather than liquidity: a different hypothesis, and the one that
+   survived.
 
 3. **The headline flips at 4x on `contact_response.rate.*`**, an asserted number
    that we set, in the direction a sceptical reader would guess.
@@ -333,7 +372,11 @@ The five that would change how you read the numbers above:
    alternative — attribution windows — is where recovery products go to flatter
    themselves.
 
-5. **Three world bugs shipped and were fixed during the build**, each of which
+5. **The margin is one decline class.** `auth_abandoned` carries all of it, and
+   OURS loses to the fixed ladder on four of the other five. See the results
+   section above; it is a fact about the result rather than a caveat on it.
+
+6. **Three world bugs shipped and were fixed during the build**, each of which
    invalidated a headline first: scheduling fired immediately, dead instruments
    were unrecoverable, and contacts could not produce settlements. The third made
    "same recovery, far fewer contacts" true by construction for four
@@ -341,7 +384,22 @@ The five that would change how you read the numbers above:
 
 ---
 
-## Simulated at scale, real at the edges
+## 8. Next steps
+
+The obvious next experiment has not been run: a hybrid applying OURS to
+auth_abandoned and the fixed ladder elsewhere would likely beat both. We are
+reporting the policy we built and measured, not the one this result implies.
+
+After that, in order:
+
+1. **Reduced-amount retries.** The largest single gap in the action space, and
+   the natural response to `insufficient_funds` that the policy cannot express.
+2. **Fit `contact_response.rate.*` to real data.** It decides the headline under
+   sensitivity and it is currently ours.
+3. **Point the auditor at live settlement data** — not to improve it, but to
+   find out how much of its simulated accuracy is real.
+
+## 9. Simulated at scale, real at the edges
 
 **The batch is synthetic.** All cases come from a seeded generator in
 `settle/sim/`. Nobody's card was declined and no money moved.

@@ -1,10 +1,10 @@
 {
   "arms": {
     "B0": {
-      "actually_settled": 450,
+      "actually_settled": 2251,
       "arm": "B0",
       "believed_recovered": 0,
-      "cases": 2000,
+      "cases": 10000,
       "censored_fraction": 0.0,
       "compliance_violations": 0,
       "contacts": 0,
@@ -15,8 +15,8 @@
       "incremental_paise": 0,
       "incremental_rate": 0.0,
       "mode": "ENFORCE",
-      "recovered": 450,
-      "reported_minus_reconciled_cases": -450,
+      "recovered": 2251,
+      "reported_minus_reconciled_cases": -2251,
       "silent_failure_rate": 0.0,
       "silent_failures": {
         "SF-1": 0,
@@ -30,176 +30,176 @@
       "spend_paise": 0
     },
     "B1": {
-      "actually_settled": 697,
+      "actually_settled": 3655,
       "arm": "B1",
-      "believed_recovered": 404,
-      "cases": 2000,
+      "believed_recovered": 2128,
+      "cases": 10000,
       "censored_fraction": 0.0,
       "compliance_violations": 0,
-      "contacts": 177,
-      "contacts_per_case": 0.0885,
-      "cost_per_100": 0.06436428480940388,
-      "dispatches": 1388,
-      "incremental_cases": 243,
-      "incremental_paise": 17602930,
-      "incremental_rate": 0.1215,
+      "contacts": 897,
+      "contacts_per_case": 0.0897,
+      "cost_per_100": 0.05931500149602007,
+      "dispatches": 7052,
+      "incremental_cases": 1386,
+      "incremental_paise": 95473318,
+      "incremental_rate": 0.1386,
       "mode": "ENFORCE",
-      "recovered": 690,
-      "reported_minus_reconciled_cases": -293,
-      "silent_failure_rate": 0.023,
+      "recovered": 3629,
+      "reported_minus_reconciled_cases": -1527,
+      "silent_failure_rate": 0.0226,
       "silent_failures": {
-        "SF-1": 16,
+        "SF-1": 81,
         "SF-2": 0,
         "SF-3": 0,
-        "SF-4": 23,
+        "SF-4": 119,
         "SF-5": 0,
         "SF-6": 0,
-        "SF-7": 7
+        "SF-7": 26
       },
-      "spend_paise": 11330
+      "spend_paise": 56630
     },
     "B2": {
-      "actually_settled": 970,
+      "actually_settled": 4943,
       "arm": "B2",
-      "believed_recovered": 776,
-      "cases": 2000,
+      "believed_recovered": 3959,
+      "cases": 10000,
       "censored_fraction": 0.0,
       "compliance_violations": 0,
-      "contacts": 2852,
-      "contacts_per_case": 1.426,
-      "cost_per_100": 0.27138129915063075,
-      "dispatches": 6576,
-      "incremental_cases": 513,
-      "incremental_paise": 37268596,
-      "incremental_rate": 0.2565,
+      "contacts": 14027,
+      "contacts_per_case": 1.4027,
+      "cost_per_100": 0.27651626108088945,
+      "dispatches": 33027,
+      "incremental_cases": 2665,
+      "incremental_paise": 181271437,
+      "incremental_rate": 0.2665,
       "mode": "ENFORCE",
-      "recovered": 960,
-      "reported_minus_reconciled_cases": -194,
-      "silent_failure_rate": 0.053,
+      "recovered": 4903,
+      "reported_minus_reconciled_cases": -984,
+      "silent_failure_rate": 0.0504,
       "silent_failures": {
-        "SF-1": 23,
-        "SF-2": 17,
+        "SF-1": 128,
+        "SF-2": 86,
         "SF-3": 0,
-        "SF-4": 57,
+        "SF-4": 255,
         "SF-5": 0,
         "SF-6": 0,
-        "SF-7": 9
+        "SF-7": 35
       },
-      "spend_paise": 101140
+      "spend_paise": 501245
     },
     "B3": {
-      "actually_settled": 1294,
+      "actually_settled": 6494,
       "arm": "B3",
-      "believed_recovered": 1223,
-      "cases": 2000,
+      "believed_recovered": 6110,
+      "cases": 10000,
       "censored_fraction": 0.0,
-      "compliance_violations": 889,
-      "contacts": 5067,
-      "contacts_per_case": 2.5335,
-      "cost_per_100": 4.770268491963353,
-      "dispatches": 13737,
-      "incremental_cases": 833,
-      "incremental_paise": 56514429,
-      "incremental_rate": 0.4165,
+      "compliance_violations": 4407,
+      "contacts": 24780,
+      "contacts_per_case": 2.478,
+      "cost_per_100": 4.257680955777003,
+      "dispatches": 68417,
+      "incremental_cases": 4190,
+      "incremental_paise": 278457924,
+      "incremental_rate": 0.419,
       "mode": "OBSERVE",
-      "recovered": 1278,
-      "reported_minus_reconciled_cases": -71,
-      "silent_failure_rate": 0.527,
+      "recovered": 6425,
+      "reported_minus_reconciled_cases": -384,
+      "silent_failure_rate": 0.5187,
       "silent_failures": {
-        "SF-1": 37,
-        "SF-2": 10,
+        "SF-1": 179,
+        "SF-2": 35,
         "SF-3": 0,
-        "SF-4": 103,
-        "SF-5": 79,
-        "SF-6": 810,
-        "SF-7": 15
+        "SF-4": 501,
+        "SF-5": 401,
+        "SF-6": 4006,
+        "SF-7": 65
       },
-      "spend_paise": 2695890
+      "spend_paise": 11855850
     },
     "OURS": {
-      "actually_settled": 1015,
+      "actually_settled": 5122,
       "arm": "OURS",
-      "believed_recovered": 815,
-      "cases": 2000,
+      "believed_recovered": 4146,
+      "cases": 10000,
       "censored_fraction": 0.0,
       "compliance_violations": 0,
-      "contacts": 9,
-      "contacts_per_case": 0.0045,
-      "cost_per_100": 0.08950272104357186,
-      "dispatches": 6993,
-      "incremental_cases": 558,
-      "incremental_paise": 39166407,
-      "incremental_rate": 0.279,
+      "contacts": 36,
+      "contacts_per_case": 0.0036,
+      "cost_per_100": 0.08918918109445512,
+      "dispatches": 33995,
+      "incremental_cases": 2837,
+      "incremental_paise": 190981684,
+      "incremental_rate": 0.2837,
       "mode": "ENFORCE",
-      "recovered": 1006,
-      "reported_minus_reconciled_cases": -200,
-      "silent_failure_rate": 0.0145,
+      "recovered": 5074,
+      "reported_minus_reconciled_cases": -976,
+      "silent_failure_rate": 0.0175,
       "silent_failures": {
-        "SF-1": 23,
-        "SF-2": 0,
+        "SF-1": 138,
+        "SF-2": 1,
         "SF-3": 0,
         "SF-4": 0,
         "SF-5": 0,
         "SF-6": 0,
-        "SF-7": 6
+        "SF-7": 36
       },
-      "spend_paise": 35055
+      "spend_paise": 170335
     }
   },
   "by_decline_class": {
     "ambiguous": {
-      "b0_recovered": 63,
+      "b0_recovered": 296,
       "b2": {
-        "cases": 42,
-        "paise": 2450080,
-        "rate": 0.16216216216216217
+        "cases": 245,
+        "paise": 16549021,
+        "rate": 0.19886363636363635
       },
-      "cases": 259,
+      "cases": 1232,
       "ours": {
-        "cases": 48,
-        "paise": 2695542,
-        "rate": 0.18532818532818532
+        "cases": 209,
+        "paise": 13134848,
+        "rate": 0.16964285714285715
       },
-      "ours_minus_b2_rate": 0.023166023166023147
+      "ours_minus_b2_rate": -0.029220779220779203
     },
     "auth_abandoned": {
-      "b0_recovered": 50,
+      "b0_recovered": 256,
       "b2": {
-        "cases": 6,
-        "paise": 247331,
-        "rate": 0.025974025974025976
+        "cases": 25,
+        "paise": 1404017,
+        "rate": 0.0228310502283105
       },
-      "cases": 231,
+      "cases": 1095,
       "ours": {
-        "cases": 119,
-        "paise": 7610420,
-        "rate": 0.5151515151515151
+        "cases": 547,
+        "paise": 33846014,
+        "rate": 0.4995433789954338
       },
-      "ours_minus_b2_rate": 0.48917748917748916
+      "ours_minus_b2_rate": 0.4767123287671233
     },
     "dead_instrument": {
-      "b0_recovered": 67,
+      "b0_recovered": 376,
       "b2": {
-        "cases": 35,
-        "paise": 2696690,
-        "rate": 0.10703363914373089
+        "cases": 154,
+        "paise": 10057651,
+        "rate": 0.09221556886227544
       },
-      "cases": 327,
+      "cases": 1670,
       "ours": {
         "cases": 0,
         "paise": 0,
         "rate": 0.0
       },
-      "ours_minus_b2_rate": -0.10703363914373089
+      "ours_minus_b2_rate": -0.09221556886227544
     },
     "terminal": {
-      "b0_recovered": 15,
+      "b0_recovered": 77,
       "b2": {
         "cases": 0,
         "paise": 0,
         "rate": 0.0
       },
-      "cases": 74,
+      "cases": 314,
       "ours": {
         "cases": 0,
         "paise": 0,
@@ -208,34 +208,34 @@
       "ours_minus_b2_rate": 0.0
     },
     "time_shiftable": {
-      "b0_recovered": 207,
+      "b0_recovered": 975,
       "b2": {
-        "cases": 359,
-        "paise": 27033423,
-        "rate": 0.39933259176863184
+        "cases": 1799,
+        "paise": 124072332,
+        "rate": 0.40327280878726746
       },
-      "cases": 899,
+      "cases": 4461,
       "ours": {
-        "cases": 328,
-        "paise": 24385412,
-        "rate": 0.36484983314794217
+        "cases": 1672,
+        "paise": 116963088,
+        "rate": 0.3748038556377494
       },
-      "ours_minus_b2_rate": -0.03448275862068967
+      "ours_minus_b2_rate": -0.028468953149518084
     },
     "transient": {
-      "b0_recovered": 48,
+      "b0_recovered": 271,
       "b2": {
-        "cases": 71,
-        "paise": 4841072,
-        "rate": 0.3380952380952381
+        "cases": 442,
+        "paise": 29188416,
+        "rate": 0.35993485342019543
       },
-      "cases": 210,
+      "cases": 1228,
       "ours": {
-        "cases": 63,
-        "paise": 4475033,
-        "rate": 0.3
+        "cases": 409,
+        "paise": 27037734,
+        "rate": 0.3330618892508143
       },
-      "ours_minus_b2_rate": -0.038095238095238126
+      "ours_minus_b2_rate": -0.02687296416938112
     }
   },
   "calibration": {
@@ -395,14 +395,251 @@
       "shipped_uplift_ece": 0.017570933351490594
     }
   },
-  "meta": {
+  "comparison": {
+    "arms": {
+      "B0": {
+        "actually_settled": 450,
+        "believed_recovered": 0,
+        "compliance_violations": 0,
+        "contacts": 0,
+        "contacts_per_case": 0.0,
+        "cost_per_100": null,
+        "dispatches": 0,
+        "incremental_cases": 0,
+        "incremental_paise": 0,
+        "incremental_rate": 0.0,
+        "recovered": 450,
+        "reported_minus_reconciled_cases": -450,
+        "silent_failure_rate": 0.0
+      },
+      "B1": {
+        "actually_settled": 697,
+        "believed_recovered": 404,
+        "compliance_violations": 0,
+        "contacts": 177,
+        "contacts_per_case": 0.0885,
+        "cost_per_100": 0.06436428480940388,
+        "dispatches": 1388,
+        "incremental_cases": 243,
+        "incremental_paise": 17602930,
+        "incremental_rate": 0.1215,
+        "recovered": 690,
+        "reported_minus_reconciled_cases": -293,
+        "silent_failure_rate": 0.023
+      },
+      "B2": {
+        "actually_settled": 970,
+        "believed_recovered": 776,
+        "compliance_violations": 0,
+        "contacts": 2852,
+        "contacts_per_case": 1.426,
+        "cost_per_100": 0.27138129915063075,
+        "dispatches": 6576,
+        "incremental_cases": 513,
+        "incremental_paise": 37268596,
+        "incremental_rate": 0.2565,
+        "recovered": 960,
+        "reported_minus_reconciled_cases": -194,
+        "silent_failure_rate": 0.053
+      },
+      "B3": {
+        "actually_settled": 1294,
+        "believed_recovered": 1223,
+        "compliance_violations": 889,
+        "contacts": 5067,
+        "contacts_per_case": 2.5335,
+        "cost_per_100": 4.770268491963353,
+        "dispatches": 13737,
+        "incremental_cases": 833,
+        "incremental_paise": 56514429,
+        "incremental_rate": 0.4165,
+        "recovered": 1278,
+        "reported_minus_reconciled_cases": -71,
+        "silent_failure_rate": 0.527
+      },
+      "OURS": {
+        "actually_settled": 1015,
+        "believed_recovered": 815,
+        "compliance_violations": 0,
+        "contacts": 9,
+        "contacts_per_case": 0.0045,
+        "cost_per_100": 0.08950272104357186,
+        "dispatches": 6993,
+        "incremental_cases": 558,
+        "incremental_paise": 39166407,
+        "incremental_rate": 0.279,
+        "recovered": 1006,
+        "reported_minus_reconciled_cases": -200,
+        "silent_failure_rate": 0.0145
+      }
+    },
+    "by_decline_class": {
+      "ambiguous": {
+        "b0_recovered": 63,
+        "b2": {
+          "cases": 42,
+          "paise": 2450080,
+          "rate": 0.16216216216216217
+        },
+        "cases": 259,
+        "ours": {
+          "cases": 48,
+          "paise": 2695542,
+          "rate": 0.18532818532818532
+        },
+        "ours_minus_b2_rate": 0.023166023166023147
+      },
+      "auth_abandoned": {
+        "b0_recovered": 50,
+        "b2": {
+          "cases": 6,
+          "paise": 247331,
+          "rate": 0.025974025974025976
+        },
+        "cases": 231,
+        "ours": {
+          "cases": 119,
+          "paise": 7610420,
+          "rate": 0.5151515151515151
+        },
+        "ours_minus_b2_rate": 0.48917748917748916
+      },
+      "dead_instrument": {
+        "b0_recovered": 67,
+        "b2": {
+          "cases": 35,
+          "paise": 2696690,
+          "rate": 0.10703363914373089
+        },
+        "cases": 327,
+        "ours": {
+          "cases": 0,
+          "paise": 0,
+          "rate": 0.0
+        },
+        "ours_minus_b2_rate": -0.10703363914373089
+      },
+      "terminal": {
+        "b0_recovered": 15,
+        "b2": {
+          "cases": 0,
+          "paise": 0,
+          "rate": 0.0
+        },
+        "cases": 74,
+        "ours": {
+          "cases": 0,
+          "paise": 0,
+          "rate": 0.0
+        },
+        "ours_minus_b2_rate": 0.0
+      },
+      "time_shiftable": {
+        "b0_recovered": 207,
+        "b2": {
+          "cases": 359,
+          "paise": 27033423,
+          "rate": 0.39933259176863184
+        },
+        "cases": 899,
+        "ours": {
+          "cases": 328,
+          "paise": 24385412,
+          "rate": 0.36484983314794217
+        },
+        "ours_minus_b2_rate": -0.03448275862068967
+      },
+      "transient": {
+        "b0_recovered": 48,
+        "b2": {
+          "cases": 71,
+          "paise": 4841072,
+          "rate": 0.3380952380952381
+        },
+        "cases": 210,
+        "ours": {
+          "cases": 63,
+          "paise": 4475033,
+          "rate": 0.3
+        },
+        "ours_minus_b2_rate": -0.038095238095238126
+      }
+    },
     "cases": 2000,
-    "checkpoint": "CP13",
-    "generated_at": "2026-09-01T18:31:15.973902+00:00",
+    "note": "Reported so the divergence between batch sizes is visible. The headline figures above are the 10,000-case run; SPEC \u00a73 specifies 10,000 and this is it.",
+    "seed": 42
+  },
+  "meta": {
+    "cases": 10000,
+    "checkpoint": "CP13.1",
+    "generated_at": "2026-09-02T17:07:16.201450+00:00",
     "model": "model_cba710e51c27.pkl",
     "note": "Every number the README quotes comes from this file (CHT-3). Derived from the run artefacts and out/sensitivity.json, never typed by hand.",
-    "regenerate": "python -m settle.eval.report --cases 2000 --seed 42",
+    "regenerate": "python -m settle.eval.report --cases 10000 --seed 42",
     "seed": 42
+  },
+  "retry_timing": {
+    "claim": "withdrawn \u2014 SPEC \u00a710.1, A83",
+    "liquidity_feature_ranks": {
+      "day_of_month_at_dispatch": {
+        "importance": 0.00015194779160631055,
+        "rank": 22
+      },
+      "days_to_month_start": {
+        "importance": -0.00022244871822714175,
+        "rank": 40
+      },
+      "in_liquidity_window": {
+        "importance": 0.0,
+        "rank": 34
+      }
+    },
+    "liquidity_rank_best": 22,
+    "liquidity_rank_worst": 40,
+    "n_features": 46,
+    "n_offsets": 8,
+    "offsets": [
+      0,
+      6,
+      18,
+      30,
+      48,
+      72,
+      120,
+      168
+    ],
+    "recency_feature_ranks": {
+      "days_since_last_attempt": {
+        "importance": 0.009998074527674866,
+        "rank": 2
+      }
+    },
+    "spread": {
+      "max": 0.35316791206668974,
+      "median": 0.06047102236159774,
+      "n_retry_rows": 1770,
+      "p90": 0.12504227470954
+    },
+    "timing_feature_ranks": {
+      "day_of_month_at_dispatch": {
+        "importance": 0.00015194779160631055,
+        "rank": 22
+      },
+      "days_since_last_attempt": {
+        "importance": 0.009998074527674866,
+        "rank": 2
+      },
+      "days_to_month_start": {
+        "importance": -0.00022244871822714175,
+        "rank": 40
+      },
+      "in_liquidity_window": {
+        "importance": 0.0,
+        "rank": 34
+      }
+    },
+    "timing_rank_best": 2,
+    "timing_rank_worst": 40
   },
   "sensitivity": {
     "available": true,

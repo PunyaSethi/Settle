@@ -1,0 +1,73 @@
+# CP13.1 — the class breakdown, the reconciliation finding, and a 10k run.
+#
+# F16. Every headline number is now the 10,000-case run SPEC §3 specifies. The
+#      2,000-case figures are kept in the artefact's `comparison` block so the
+#      divergence between scales is visible rather than something a reader has
+#      to notice from a commit diff.
+#
+# F17. The class breakdown moved into README RESULTS. It is a fact about the
+#      result, not a caveat on it.
+#
+# F18. The auditor is reframed around understatement. Reported-minus-reconciled
+#      is negative for every arm: the dominant error is settlements the agent
+#      never learned about, not recovery it claimed and did not get.
+#
+# F19. out/charts/metrics.json -> out/metrics.json, with its own negation in
+#      .gitignore. A data file was living in an images directory because that
+#      directory held the only negation available at CP13.
+#
+# F20. SPEC §19 extended to eight sections rather than deleting the Razorpay
+#      material to satisfy a count fixed before CP12 existed.
+#
+# F21. The retry-timing figures are computed into the artefact by
+#      `settle.eval.report.timing_block` instead of being quoted from train.py's
+#      stdout. See the finding below — this is the fix that earned its keep.
+
+README.md
+KNOWN_LIMITATIONS.md
+settle/eval/charts.py
+settle/eval/report.py
+out/charts/
+out/metrics.json
+.gitignore
+SPEC.md
+PLAN.md
+tests/test_charts.py
+checkpoints/cp13_1.allowlist
+
+# --- F21 found that the figures it was auditing were wrong ------------------
+#
+# The README carried "median spread 3.7 points across eight offsets; timing
+# features rank 26-37 of 45". Recomputing them with train.py's own parameters
+# reproduces neither number, and the feature count is 46, not 45 — SPEC's A93
+# says 46, and A93 is what changed them.
+#
+# The stale figures predate A93, which recomputed `days_since_last_attempt` at
+# the dispatch moment rather than the decision tick and added
+# `hours_to_contact_window`. They were carried forward from an older training
+# log through CP13's prompt and into the README without anyone re-running the
+# training that produced them.
+#
+# `train.py` also groups four features as "timing", and they are not one thing.
+# A83's withdrawn claim was about reaching a customer's LIQUIDITY WINDOW —
+# `day_of_month_at_dispatch`, `days_to_month_start`, `in_liquidity_window`.
+# `days_since_last_attempt` measures recency, which is a different hypothesis
+# and a far better feature. Reporting the four together understated one and
+# overstated the other, so `timing_block` separates them and the README quotes
+# the liquidity three.
+#
+# A83's conclusion survives: the liquidity features rank where the withdrawal
+# said they would, and there is still no liquidity curve. What changed is that
+# the numbers supporting it are now recomputed from a committed artefact and
+# checked by a test, rather than quoted from a log nobody re-ran.
+#
+# This is the whole argument for CHT-3 in one incident. The figures were in the
+# README for exactly one checkpoint before they were caught, and they were only
+# caught because F21 forced them into an artefact.
+
+# --- One note on `report.py` ------------------------------------------------
+#
+# Each arm now runs exactly once. `by_decline_class` took the runs rather than
+# making its own, which at 10,000 cases removes three redundant arm runs from
+# the critical path. They must agree with the headline table by construction
+# anyway; if they ever disagreed, the bug would have been in the duplication.

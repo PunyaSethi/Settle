@@ -1432,6 +1432,27 @@ database.
 5. How thresholds were chosen
 6. Priors and provenance
 7. Known limitations
+8. Next steps
+9. Simulated at scale, real at the edges
+
+Sections 8 and 9 were added at CP13.1. The order was fixed before CP12 existed,
+and the Razorpay edge is now a claim the README has to make: a judge who reads
+seven sections of simulated results and finds no statement of what is real has
+been left to work it out. Extending the list is the correct move; deleting the
+content to satisfy a count set before the content existed is not.
+
+Next steps follows known limitations because the two are one thought — what is
+wrong, then what we would do about it — and because the strongest item on it
+comes from a result rather than from a wish: the margin is one decline class, so
+the hybrid is the obvious experiment and we have not run it.
+
+The edge sits last on purpose. The batch is the result and the edge is the
+credibility check on it, so a reader meets the numbers, then the limits on them,
+and only then the one object that is not simulated. Leading with it would sell a
+single test-mode payment as the achievement.
+
+Known limitations moved to `KNOWN_LIMITATIONS.md` when it outgrew a section.
+Section 7 is the five entries that change how the numbers read, and a link.
 
 ## 20. Cost constants — ASSERTED, pending sourcing
 
@@ -1711,3 +1732,8 @@ Resolved:
 - 2026-09-02 — A115: `KNOWN_LIMITATIONS.md` added, discharging the six references that had pointed at nothing since CP2 and adding the measured negative results. Every entry states the limitation and its cost; a limitation that only restates a design decision is a feature description. Recorded here rather than in the README because it outgrew a section.
 - 2026-09-02 — A116: §14.4 — incremental recovery is reported per decline class as well as in aggregate. The aggregate hides the shape: the entire OURS margin is `auth_abandoned` (+48.9 points) and it loses to B2 on three of six classes including the largest. Chart 3 draws the losses at the same weight as the wins.
 - 2026-09-02 — A117: §14.4 — B3's headline recovery is reported next to its 889 compliance violations and 52.70% silent-failure rate wherever it appears. B3 recovers more than OURS and runs in OBSERVE; printing the first number without the second two would misrepresent an unguarded upper bound as a competitor.
+- 2026-09-02 — A118: §3, §14.4 — the headline is measured at 10,000 cases, the batch size §3 has specified since CP0. Every README number moves to it. The 2,000-case figures are kept in `out/metrics.json`'s `comparison` block: the margin narrows from 2.25 points to 1.72 between the two scales, and a reader who has seen both should be able to see the divergence rather than guess which is current.
+- 2026-09-02 — A119: §19 extended to nine sections. Next steps follows known limitations because the two are one thought, and because its strongest item comes from a result rather than a wish. Simulated-at-scale sits last: the batch is the result and the edge is the credibility check on it.
+- 2026-09-02 — A120: §10.1 — the A83 retry-timing figures are computed into `out/metrics.json` by `settle.eval.report.timing_block` rather than quoted from `train.py` stdout, and CHT-3 verifies them. The figures the README carried until CP13.1 — 3.7-point median spread, ranks 26-37 of 45 — reproduce none of the current values and predate A93. `train.py`'s four "timing features" are two hypotheses: the three liquidity features rank 22, 34 and 40 of 46, while `days_since_last_attempt` ranks 2 and measures recency. A83's withdrawal stands; the numbers behind it are now auditable.
+- 2026-09-02 — A121: §7 — the auditor's dominant measured error is understatement, not overstatement. Reported-minus-reconciled is negative for every arm, and the harm is SF-2: OURS believed 4,146 cases recovered when 5,122 had settled, so 976 settlements never reached the agent. SF-2 is reported per arm alongside it, with the statement that OURS's 1 against B2's 86 follows from contacting 36 times rather than 14,027 and not from the auditor being better at finding them.
+- 2026-09-02 — A122: `out/charts/metrics.json` moved to `out/metrics.json` with its own `.gitignore` negation. A data file was living in an images directory because that directory carried the only negation available when it was written.

@@ -19,6 +19,12 @@ venv/
 out/*
 !out/charts/
 
+# The committed metrics artefact. Every number in the README is checked against
+# it by CHT-3, so it is a deliverable rather than a run artefact. It lived under
+# out/charts/ until CP13.1 only because that was the one negation already here,
+# which made a data file sit in an images directory.
+!out/metrics.json
+
 # The raw Razorpay webhook events stay on the machine that received them.
 # Razorpay's checkout SMS-verifies the payer's phone number, so a real payment
 # carries a real mobile number. out/razorpay_demo.json publishes a contact-free

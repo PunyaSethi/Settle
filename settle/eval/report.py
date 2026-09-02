@@ -15,20 +15,17 @@ recovery rate with nothing behind it would be making the mistake it was written
 to criticise. So the README is generated against this file and tested against
 it, and a number that cannot be traced here does not go in.
 
-Why it lives under `out/charts/`
---------------------------------
-`.gitignore` carries `out/*` with a single negation, `!out/charts/`. That is the
-only committed path under `out/`, and `.gitignore` is not on the CP13 allowlist.
-So the data artefact sits beside the images it feeds. It is not where it would
-have been put given a free choice — `out/metrics.json` would be the honest
-location — and the allowlist note records that.
-
 Cost
 ----
-This runs five arms over the batch and reconciles each. Two to three minutes at
-2,000 cases. `charts.py` does not run it: charts render from the committed JSON,
-so the fast path stays fast and CHT-1 can assert determinism without a
+This runs five arms over the batch, reconciles each, then measures calibration
+and retry-offset sensitivity on the held-out split. Roughly ten minutes at
+10,000 cases. `charts.py` does not run it: charts render from the committed
+JSON, so the fast path stays fast and CHT-1 can assert determinism without a
 simulation in the loop.
+
+Each arm is run exactly once. The per-class breakdown and the headline table are
+two views of the same runs, and running them twice would have cost half the wall
+clock to produce numbers that must agree by construction anyway.
 """
 
 from __future__ import annotations
@@ -63,7 +60,7 @@ from settle.sim.generator import generate_batch
 from settle.sim.observability import ObservabilityConfig
 from settle.sim.streams import Streams
 
-DEFAULT_OUT: Final[Path] = Path("out/charts/metrics.json")
+DEFAULT_OUT: Final[Path] = Path("out/metrics.json")
 SENSITIVITY: Final[Path] = Path("out/sensitivity.json")
 
 # See `calibration_block`. A reliability bucket drawing this share or more of
@@ -130,8 +127,8 @@ def _censored(reconciled: dict[str, ReconciledCase]) -> float:
     return sum(1 for r in reconciled.values() if r.censored) / len(reconciled)
 
 
-def arms_block(batch, seed: int, estimator: Estimator | None) -> dict[str, Any]:
-    """Every arm's §14.4 row. Chart 1 reads `contacts_per_case` and rate."""
+def run_arms(batch, seed: int, estimator: Estimator | None) -> dict[str, tuple]:
+    """Every arm, once. The result feeds both the headline table and the classes."""
     specs: list[tuple[str, Any]] = [
         ("B0", DoNothingArm()),
         ("B1", SingleRetryArm()),
@@ -146,7 +143,11 @@ def arms_block(batch, seed: int, estimator: Estimator | None) -> dict[str, Any]:
         started = time.perf_counter()
         results[name] = _run(arm, batch, seed)
         print(f"  {name:<5} {time.perf_counter() - started:6.1f}s")
+    return results
 
+
+def arms_block(results: dict[str, tuple]) -> dict[str, Any]:
+    """Every arm's §14.4 row. Chart 1 reads `contacts_per_case` and rate."""
     baseline = results["B0"][0]
     block: dict[str, Any] = {}
     for name, (result, reconciled) in results.items():
@@ -184,17 +185,21 @@ def arms_block(batch, seed: int, estimator: Estimator | None) -> dict[str, Any]:
     return block
 
 
-def by_decline_class(batch, seed: int, estimator: Estimator) -> dict[str, Any]:
-    """Chart 3. Incremental recovery per decline class, OURS against B2.
+def by_decline_class(batch, results: dict[str, tuple]) -> dict[str, Any]:
+    """Chart 3. Incremental recovery per class, OURS against B2.
 
     Split out rather than folded into the headline because the headline hides
     the shape: a single incremental rate cannot say which classes we win and
     which we lose, and a chart that only showed the wins would be a limitations
     section displaced into a picture.
+
+    Takes the runs rather than making its own. At 10,000 cases re-running three
+    arms costs minutes to produce figures that must agree with the headline
+    table by construction — and if they ever disagreed, the bug would be here.
     """
-    b0, _ = _run(DoNothingArm(), batch, seed)
-    b2, _ = _run(FixedLadderArm(), batch, seed)
-    ours, _ = _run(OursArm(estimator), batch, seed)
+    b0 = results["B0"][0]
+    b2 = results["B2"][0]
+    ours = results["OURS"][0] if "OURS" in results else None
 
     class_of = {
         generated.observed.case_id: classify(generated.observed.decline_code).value
@@ -215,6 +220,8 @@ def by_decline_class(batch, seed: int, estimator: Estimator) -> dict[str, Any]:
         out[class_of[case_id]]["b0_recovered"] += 1
 
     for key, result in (("b2", b2), ("ours", ours)):
+        if result is None:
+            continue
         for case_id in result.recovered - b0.recovered:
             bucket = out[class_of[case_id]][key]
             bucket["cases"] += 1
@@ -326,6 +333,117 @@ def calibration_block(model_path: Path) -> dict[str, Any]:
     }
 
 
+
+def timing_block(model_path: Path) -> dict[str, Any]:
+    """The withdrawn retry-timing claim, as an artefact rather than a log line.
+
+    §10.1's A83 records that retry timing was hypothesised as a differentiator,
+    tested, and withdrawn. The two numbers that support the withdrawal — the
+    median spread across the eight offsets, and where the timing features rank
+    by permutation importance — were printed by `train.py` and nowhere else, so
+    the README was quoting a training log a reader could not check.
+
+    Recomputed here with the same parameters `train.py` uses, so the figures are
+    the same ones and CHT-3 can verify them.
+    """
+    from sklearn.inspection import permutation_importance
+
+    from settle.agent.features import FEATURE_NAMES
+    from settle.policy.params import hour_offsets
+    from settle.schema.action import Retry
+
+    payload = pickle.loads(model_path.read_bytes())
+    winner = payload["winner"]
+    estimator = Estimator(payload["models"][winner], winner)
+
+    rows, y, case_ids = load_rows(
+        Path("out/explore.decisions.jsonl"),
+        Path("out/labels.jsonl"),
+        Path("out/explore.cases.jsonl"),
+    )
+    _, _, test = split_by_case(case_ids)
+    matrix = build_matrix(rows)
+
+    # Permutation importance, same call as train.py's `_feature_importance`:
+    # 3,000 rows, 5 repeats, random_state 0, neg-Brier. Model-agnostic, so it
+    # answers "which features did it use" rather than "which has a coefficient".
+    sample = min(3_000, len(test.rows))
+    importance = permutation_importance(
+        estimator.model,
+        matrix[test.rows][:sample],
+        y[test.rows][:sample],
+        n_repeats=5,
+        random_state=0,
+        scoring="neg_brier_score",
+    )
+    ranked = sorted(
+        zip(FEATURE_NAMES, importance.importances_mean), key=lambda kv: -kv[1]
+    )
+    order = [name for name, _ in ranked]
+    # `train.py` groups all four as "timing features". They are not one thing.
+    # A83's withdrawn claim was specifically about reaching a customer's
+    # liquidity window — the first three. `days_since_last_attempt` measures
+    # recency, which is a different hypothesis and, as it turns out, a much
+    # better feature. Reporting them together would understate one and overstate
+    # the other, so they are separated here.
+    liquidity_features = (
+        "day_of_month_at_dispatch",
+        "days_to_month_start",
+        "in_liquidity_window",
+    )
+    recency_features = ("days_since_last_attempt",)
+    lookup = dict(ranked)
+
+    def rank_block(names):
+        return {
+            name: {"rank": order.index(name) + 1, "importance": lookup[name]}
+            for name in names
+            if name in order
+        }
+
+    liquidity = rank_block(liquidity_features)
+    recency = rank_block(recency_features)
+    ranks = {**liquidity, **recency}
+
+    # EST-9's spread. If the probability does not move with the offset, the
+    # model has learned nothing about timing and §9's liquidity claim is
+    # unsupported. Same 4,000-row cap as train.py.
+    offsets = hour_offsets()
+    spreads: list[float] = []
+    for index in test.rows[:4_000]:
+        case, action, tick, last_attempt = rows[index]
+        if not isinstance(action, Retry):
+            continue
+        probabilities = [
+            estimator.predict_proba(
+                case, Retry(at_hour_offset=offset, rail=action.rail), tick, last_attempt
+            )
+            for offset in offsets
+        ]
+        spreads.append(max(probabilities) - min(probabilities))
+    spreads.sort()
+
+    return {
+        "claim": "withdrawn — SPEC §10.1, A83",
+        "n_features": len(order),
+        "n_offsets": len(offsets),
+        "offsets": list(offsets),
+        "timing_feature_ranks": ranks,
+        "liquidity_feature_ranks": liquidity,
+        "recency_feature_ranks": recency,
+        "liquidity_rank_best": min(r["rank"] for r in liquidity.values()) if liquidity else None,
+        "liquidity_rank_worst": max(r["rank"] for r in liquidity.values()) if liquidity else None,
+        "timing_rank_best": min(r["rank"] for r in ranks.values()) if ranks else None,
+        "timing_rank_worst": max(r["rank"] for r in ranks.values()) if ranks else None,
+        "spread": {
+            "n_retry_rows": len(spreads),
+            "median": spreads[len(spreads) // 2] if spreads else None,
+            "p90": spreads[int(len(spreads) * 0.9)] if spreads else None,
+            "max": spreads[-1] if spreads else None,
+        },
+    }
+
+
 def sensitivity_block(path: Path = SENSITIVITY) -> dict[str, Any]:
     """Chart 4. The sweep, distilled to what the chart draws.
 
@@ -377,24 +495,58 @@ def sensitivity_block(path: Path = SENSITIVITY) -> dict[str, Any]:
     }
 
 
-def build(cases: int, seed: int, model_path: Path) -> dict[str, Any]:
+def headline_rows(block: dict[str, Any]) -> dict[str, Any]:
+    """The subset of an arms block a size-comparison needs."""
+    keep = (
+        "incremental_rate", "incremental_cases", "incremental_paise", "recovered",
+        "contacts", "contacts_per_case", "dispatches", "cost_per_100",
+        "silent_failure_rate", "compliance_violations", "believed_recovered",
+        "actually_settled", "reported_minus_reconciled_cases",
+    )
+    return {arm: {k: row[k] for k in keep} for arm, row in block.items()}
+
+
+def build(cases: int, seed: int, model_path: Path, compare_cases: int | None = None) -> dict[str, Any]:
     print(f"report: {cases:,} cases, seed {seed}, model {model_path.name}")
     payload = pickle.loads(model_path.read_bytes())
     estimator = Estimator(payload["models"][payload["winner"]], payload["winner"])
 
     batch = generate_batch(cases, seed)
     print("arms:")
-    arms = arms_block(batch, seed, estimator)
+    results = run_arms(batch, seed, estimator)
+    arms = arms_block(results)
     print("decline classes:")
-    classes = by_decline_class(batch, seed, estimator)
+    classes = by_decline_class(batch, results)
     print("calibration:")
     calibration = calibration_block(model_path)
+    print("retry timing:")
+    timing = timing_block(model_path)
     print("sensitivity:")
     sensitivity = sensitivity_block()
 
+    comparison: dict[str, Any] | None = None
+    if compare_cases and compare_cases != cases:
+        # The headline moved between batch sizes at CP13.1 and a reader who has
+        # seen both should be able to see the divergence rather than wonder
+        # which one is current. Run once, keep only the headline rows.
+        print(f"comparison at {compare_cases:,} cases:")
+        small_batch = generate_batch(compare_cases, seed)
+        small_results = run_arms(small_batch, seed, estimator)
+        comparison = {
+            "cases": compare_cases,
+            "seed": seed,
+            "arms": headline_rows(arms_block(small_results)),
+            "by_decline_class": by_decline_class(small_batch, small_results),
+            "note": (
+                "Reported so the divergence between batch sizes is visible. The "
+                "headline figures above are the 10,000-case run; SPEC §3 "
+                "specifies 10,000 and this is it."
+            ),
+        }
+
     return {
         "meta": {
-            "checkpoint": "CP13",
+            "checkpoint": "CP13.1",
             "generated_at": datetime.now(tz=timezone.utc).isoformat(),
             "cases": cases,
             "seed": seed,
@@ -411,20 +563,27 @@ def build(cases: int, seed: int, model_path: Path) -> dict[str, Any]:
         "arms": arms,
         "by_decline_class": classes,
         "calibration": calibration,
+        "retry_timing": timing,
         "sensitivity": sensitivity,
+        "comparison": comparison,
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="settle.eval.report", description=__doc__)
-    parser.add_argument("--cases", type=int, default=2_000)
+    parser.add_argument("--cases", type=int, default=10_000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--model", type=Path, default=None)
+    parser.add_argument(
+        "--compare-cases", type=int, default=None,
+        help="also run this batch size and record its headline rows, so a "
+             "change of scale is visible rather than silent",
+    )
     args = parser.parse_args(argv)
 
     model_path = args.model or Path(latest_model_path())
-    report = build(args.cases, args.seed, model_path)
+    report = build(args.cases, args.seed, model_path, args.compare_cases)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"\nwrote {args.out}")

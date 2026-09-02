@@ -20,7 +20,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHARTS_DIR = REPO_ROOT / "out" / "charts"
-METRICS = CHARTS_DIR / "metrics.json"
+METRICS = REPO_ROOT / "out" / "metrics.json"
 README = REPO_ROOT / "README.md"
 
 CHART_FILES = (
@@ -128,7 +128,7 @@ def test_CHT_2_charts_read_the_artefacts_and_nothing_else() -> None:
     charts = (REPO_ROOT / "settle" / "eval" / "charts.py").read_text(encoding="utf-8")
     report = (REPO_ROOT / "settle" / "eval" / "report.py").read_text(encoding="utf-8")
 
-    assert "out/charts/metrics.json" in charts
+    assert "out/metrics.json" in charts
     assert "out/sensitivity.json" in report
 
     # charts.py must not run a simulation to draw a picture. If it could, the
@@ -138,7 +138,7 @@ def test_CHT_2_charts_read_the_artefacts_and_nothing_else() -> None:
 
     from settle.eval import charts as charts_module
 
-    assert charts_module.METRICS == Path("out/charts/metrics.json")
+    assert charts_module.METRICS == Path("out/metrics.json")
 
 
 @needs_metrics
@@ -147,7 +147,10 @@ def test_CHT_2_every_chart_input_is_present_in_the_artefact() -> None:
     render them without re-running anything."""
     data = load_metrics()
 
-    assert set(data) >= {"meta", "arms", "by_decline_class", "calibration", "sensitivity"}
+    assert set(data) >= {
+        "meta", "arms", "by_decline_class", "calibration", "sensitivity",
+        "retry_timing", "comparison",
+    }
 
     for name, row in data["arms"].items():
         for field in ("incremental_rate", "contacts_per_case", "compliance_violations"):
@@ -360,6 +363,8 @@ def test_CHT_3_the_readme_headline_matches_the_artefact_exactly() -> None:
             "## 5. How the thresholds were chosen",
             "## 6. Priors and provenance",
             "## 7. Known limitations",
+            "## 8. Next steps",
+            "## 9. Simulated at scale, real at the edges",
         )
     ]
     assert positions == sorted(positions), "README sections are out of SPEC §19 order"
@@ -373,6 +378,39 @@ def test_CHT_3_the_readme_headline_matches_the_artefact_exactly() -> None:
     for name in CHART_FILES:
         assert name in readme, f"README does not show {name}"
         assert (CHARTS_DIR / name).exists(), f"{name} is referenced but not committed"
+
+
+@needs_metrics
+def test_CHT_3_the_retry_timing_figures_come_from_the_artefact() -> None:
+    """F21. Until CP13.1 the withdrawn-timing numbers existed only in train.py's
+    stdout, so the README was quoting a log a reader could not check. They are
+    recomputed into the artefact now, and this asserts the README uses those.
+
+    It also catches the reason F21 mattered: the figures the README carried were
+    stale, from a training log predating A93.
+    """
+    data = load_metrics()
+    timing = data["retry_timing"]
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    limits = (REPO_ROOT / "KNOWN_LIMITATIONS.md").read_text(encoding="utf-8")
+
+    assert timing["spread"]["median"] is not None
+    assert timing["spread"]["n_retry_rows"] > 0
+    assert timing["liquidity_feature_ranks"], "no liquidity features ranked"
+
+    median_points = f"{timing['spread']['median'] * 100:.1f}"
+    best = timing["liquidity_rank_best"]
+    worst = timing["liquidity_rank_worst"]
+    total = timing["n_features"]
+
+    for document, name in ((readme, "README.md"), (limits, "KNOWN_LIMITATIONS.md")):
+        assert median_points in document, (
+            f"{name} does not quote the recomputed median spread {median_points}"
+        )
+        assert f"{best}" in document and f"{worst}" in document, (
+            f"{name} does not quote the recomputed liquidity ranks {best}-{worst}"
+        )
+        assert f"{total}" in document, f"{name} does not quote the feature count {total}"
 
 
 def test_CHT_3_known_limitations_states_a_cost_for_every_entry() -> None:
@@ -392,7 +430,7 @@ def test_CHT_3_known_limitations_states_a_cost_for_every_entry() -> None:
     )
 
     for required in (
-        "184", "0.0392", "0.0160", "3.7", "contact_response.rate",
+        "184", "0.0392", "0.0160", "contact_response.rate",
         "Settlement Recon", "Scheduling fired immediately",
         "Dead instruments were unrecoverable",
         "Contacts could not produce settlements",

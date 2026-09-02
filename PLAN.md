@@ -34,7 +34,8 @@ of what shipped, not a retrospective invented after the fact.
 | CP12 | `55b6e47` | Razorpay test mode, real at the edges |
 | CP12.1 | `1444842` | Self-verifying artefact, then done with Razorpay |
 | CP12.2 | `1aa5de8` | Three loose ends, then charts |
-| CP13 | this | Charts and README — the first thing a judge reads |
+| CP13 | `4be14ea` | Charts and README — the first thing a judge reads |
+| CP13.1 | this | 10k run, the class breakdown in results, the reconciliation finding |
 
 ## CP12 — Razorpay test mode, real at the edges
 
@@ -159,5 +160,46 @@ written, alongside the measured negative results: withdrawn retry timing, 184 of
 188 priors asserted, the calibration trade stated as two numbers, the 4x flip on
 an asserted prior, the auditor's simulation-only validation, and the three world
 bugs that each invalidated a headline before being fixed.
+
+## CP13.1 — 10k, and what F21 caught
+
+Every headline number is now the 10,000-case run SPEC §3 specifies. The
+2,000-case figures live in the artefact's `comparison` block so a reader who has
+seen both can see the divergence rather than wonder which is current.
+
+`report.py` now runs each arm exactly once — `by_decline_class` takes the runs
+instead of making its own, which at 10,000 cases removes three redundant arm
+runs from the critical path. They had to agree with the headline table by
+construction, so the duplication could only ever have been a bug.
+
+### F21 found that the figures it was auditing were wrong
+
+The README carried "median spread 3.7 points across eight offsets; timing
+features rank 26-37 of 45". Recomputing with train.py's own parameters
+reproduces neither, and the feature count is 46 — SPEC's A93 says so, and A93 is
+what changed them. The stale numbers predate A93, which recomputed
+`days_since_last_attempt` at the dispatch moment and added
+`hours_to_contact_window`. They were carried from an old training log through
+CP13's prompt into the README without the training being re-run.
+
+`train.py` also groups four features as "timing" and they are not one thing.
+A83's withdrawn claim was about reaching a LIQUIDITY WINDOW —
+`day_of_month_at_dispatch`, `days_to_month_start`, `in_liquidity_window`.
+`days_since_last_attempt` measures recency, a different hypothesis and a much
+stronger feature. Reporting the four together understated one and overstated the
+other, so `timing_block` separates them.
+
+A83's conclusion survives. What changed is that the numbers supporting it are
+recomputed from a committed artefact and checked by a test, rather than quoted
+from a log nobody re-ran. The figures sat in the README for exactly one
+checkpoint, and they were only caught because F21 forced them into an artefact.
+That is the argument for CHT-3 in a single incident.
+
+### The reconciliation finding, reframed
+
+Reported-minus-reconciled is negative for every arm. The auditor was built
+expecting overstatement — money claimed and never settled — and the measured
+error runs the other way. The concrete harm is not a wrong dashboard number; it
+is customers who had already paid and were still being chased.
 
 Next is D5: the three-screen viewer and the voice clips.

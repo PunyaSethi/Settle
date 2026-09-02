@@ -42,7 +42,7 @@ matplotlib.use("Agg")  # no display, and deterministic across machines (CHT-1)
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.ticker import FuncFormatter  # noqa: E402
 
-METRICS: Final[Path] = Path("out/charts/metrics.json")
+METRICS: Final[Path] = Path("out/metrics.json")
 CHARTS_DIR: Final[Path] = Path("out/charts")
 
 CHART_FILES: Final[tuple[str, ...]] = (

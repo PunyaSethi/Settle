@@ -121,15 +121,31 @@ We hypothesised that learning *when* to retry — reaching a customer's liquidit
 window — would be a substantial part of the win. We tested it and withdrew the
 claim.
 
-Across the eight offsets in the action grid, the median spread in predicted
-P(settle) is **3.7 percentage points**. The timing features rank **26th to 37th
-of 45** by importance.
+The three liquidity features rank 22th, 34th and 40th of 46 by
+permutation importance. The model's probability does move across the eight
+offsets — median spread 6.0 percentage points over 1,770 retry rows — but it is
+not moving because it has found paydays.
+
+`days_since_last_attempt` is a separate matter and is worth stating plainly
+rather than folding into the same sentence. It ranks 2nd of 46, which is
+near the top. That is a claim about **recency**, not about liquidity: how long
+it has been since the last attempt is a different hypothesis from whether today
+is a payday, and it is the one that survived. `train.py` groups all four as
+"timing features", which understates one and overstates the other.
 
 **What it costs.** A coarse signal exists; a liquidity curve does not. The
 retry-timing story is not available to us, and a chunk of what makes this
 project interesting has to come from the observability layer instead. We record
 this as a measured negative result rather than deleting the hypothesis and
 writing the README as though we had never held it. (SPEC §10.1, A83)
+
+**A note on these two numbers.** Until CP13.1 they existed only in `train.py`'s
+stdout, and the figures the README carried — 3.7 points, ranks 26–37 of 45 —
+reproduced neither. They predated A93, which recomputed
+`days_since_last_attempt` at the dispatch moment and added a 46th feature. They
+were carried forward from an old training log without the training being re-run.
+They are computed into `out/metrics.json` now and checked by CHT-3, which is the
+whole argument for that test in one incident.
 
 ### 184 of 188 priors are asserted, not sourced
 
@@ -193,7 +209,7 @@ members hold across the full 16x range. (SPEC §15.2, A95, A99)
 
 ### Seven of fourteen swept parameters leave OURS completely unmoved
 
-Not because the policy is robust. Because it makes 9 contacts in 2,000 cases,
+Not because the policy is robust. Because it makes 36 contacts in 10,000 cases,
 and a parameter describing what happens when you contact someone cannot move an
 arm that does not contact anyone.
 
@@ -215,6 +231,21 @@ attribution windows — is where recovery products go to flatter themselves.
 ---
 
 ## 3. The auditor, and the limit of what we can prove
+
+### The auditor was built for the wrong direction of error
+
+It was designed to catch overstatement — money claimed and never settled. The
+measured error runs the other way for every arm: reported-minus-reconciled is
+negative throughout, because the observability layer drops settlement webhooks.
+OURS believed 4,146 cases recovered when 5,122 had settled.
+
+**What it costs.** SF-1 (marked recovered, never settled) is the class the design
+was oriented around, and it is real but small: 138 cases for OURS. The larger
+error is 976 settlements the agent never learned about, and the harm from those
+is SF-2 — chasing someone who has already paid. Our SF-2 is 1 against the fixed
+ladder's 86, but that is a consequence of contacting 36 times rather than 14,027,
+not of the auditor being good at finding them. A system with our observability
+and B2's contact volume would produce B2's SF-2 count.
 
 ### The silent-failure auditor is validated only in simulation
 
