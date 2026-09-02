@@ -253,4 +253,53 @@ result, the recovery gap is not.
 §19 is rewritten once and frozen at nine sections. It had been amended in three
 consecutive checkpoints.
 
-Next is D5: the three-screen viewer and the voice clips.
+## CP14 — the viewer
+
+`viewer/index.html`, one hand-written file: vanilla JS, hand-written CSS, no
+framework, no npm, no CDN, no build step. `settle/eval/report.py` writes
+`out/viewer_data.json` and the page renders it.
+
+The rule that shapes it: **JS renders, Python computes.** Every number on every
+screen arrives pre-formatted — percentages, rupee strings, labels, counts — and
+VIW-2 scans the file for arithmetic. A viewer that derived a rate would be a
+second implementation of a metric that already exists in `report.py`, and the
+two would disagree the first time either changed. It is the same span-locate /
+code-evaluate split the text reader uses, applied to the UI.
+
+Screen 2 is the one that earns the checkpoint. Every decision expands to every
+option the policy priced, with P(settle), EV, whether a gate would have allowed
+it, and which gate blocked it when not. Sorted by expected value, the chosen row
+marked, blocked rows in among them rather than in a footnote — an option that
+would have won on economics and was stopped by a gate is the most interesting
+row on the screen. Filters by arm, decline class, reconciliation outcome and
+gate blocks, with three demo cases pre-selected by id so a demo does not depend
+on hunting.
+
+Screen 3 is a working uploader against a route that returns 501. It renders the
+501 as the honest answer it is and names the checkpoint the endpoint lands in.
+
+### The data is embedded as well as written
+
+A browser will not `fetch()` a sibling file from a `file://` origin — Chrome
+treats each as an opaque origin. So `report.py` writes the JSON file *and*
+inlines a copy into the page between markers. Served, the page prefers the file
+so a regenerated run shows on reload; from disk, the embedded copy is the only
+one a browser will read. That is what makes VIW-4 true rather than aspirational.
+
+Traces are capped at 40 cases per arm plus any with a silent failure, and at 8
+decisions each. A single OURS case holds thirty daily decisions enumerating the
+whole grid — 330 alternatives — and sixty of those was a four-megabyte page. The
+alternatives inside a shown decision are never capped, because those are what
+VIW-3 is about and a truncated option list is a decision log that has started
+lying.
+
+### VIW-4 executes rather than asserts
+
+"Opens from file:// with no server" is easy to assert about and hard to assert
+of. There is no jsdom and adding one would mean an npm dependency in a project
+whose viewer constraint is "no build step", so the test carries a small DOM shim
+and runs the real script under Node with `location.protocol = "file:"` and
+`fetch` throwing. A page that depended on a fetch to render screens 1 or 2 fails
+there rather than in front of a judge.
+
+Next is CP15: the voice endpoint, then the video.

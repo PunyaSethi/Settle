@@ -32,6 +32,11 @@ out/*
 # CP12 and CP12.1.
 !out/model_report.json
 
+# The viewer's data. Committed for the same reason as the two above: the page
+# is a deliverable and VIW-1 checks the committed copy against the one embedded
+# in viewer/index.html.
+!out/viewer_data.json
+
 # The raw Razorpay webhook events stay on the machine that received them.
 # Razorpay's checkout SMS-verifies the payer's phone number, so a real payment
 # carries a real mobile number. out/razorpay_demo.json publishes a contact-free

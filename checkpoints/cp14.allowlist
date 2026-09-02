@@ -1,0 +1,88 @@
+# CP14 — the viewer. Three screens, one file, no build step.
+#
+# viewer/index.html is one hand-written file: vanilla JS, hand-written CSS, no
+# framework, no npm, no CDN, no build step. settle/eval/report.py writes
+# out/viewer_data.json and the page renders it.
+#
+# The rule that shapes the whole thing: JS renders, Python computes. Every
+# number on every screen arrives pre-formatted, and VIW-2 scans the file for
+# arithmetic. A viewer that derived a rate would be a second implementation of a
+# metric that already exists, and the two would disagree the first time either
+# changed. Same span-locate / code-evaluate split §11 applies to text.
+#
+# F30 discharged: settle/eval/report.py writes the sf2_attribution block, so no
+# block of out/model_report.json is produced by a scratchpad script any more.
+# train.py owns retry_timing, report.py owns sf2_attribution, each merging into
+# the file rather than overwriting it.
+
+viewer/index.html
+settle/eval/report.py
+settle/api/app.py
+out/viewer_data.json
+SPEC.md
+PLAN.md
+.gitignore
+tests/test_viewer.py
+checkpoints/cp14.allowlist
+
+# --- DEFERRED: GET / does not serve the viewer yet --------------------------
+#
+# `settle/api/app.py` is on this allowlist and the route was wired: `GET /`
+# returned `viewer/index.html` instead of its 501 stub. It was reverted before
+# commit.
+#
+# `tests/test_webhook.py::test_WBH_1_the_app_declares_exactly_the_three_spec_routes`
+# ends with `assert call("GET", "/").status == 501`, written at CP12 when the
+# stub was the truth. Serving the viewer turns that 200 and the assertion is
+# obsolete — the route table is untouched and still exactly three, so only the
+# stub assertion fails. The suite was 708 passed, 1 failed, and that was it.
+#
+# `tests/test_webhook.py` is not on this allowlist, and "gate green, commit" was
+# the stated condition. Those two cannot both hold, so the route waits. CP15
+# opens `settle/api/app.py` for the voice endpoint and `tests/test_webhook.py`
+# for its 501 assertion anyway, which is where both belong:
+#
+#   -    assert call("GET", "/").status == 501
+#   +    # GET / served a 501 stub until CP15. It serves viewer/index.html now;
+#   +    # the route table is still the three §16 fixes.
+#   +    assert call("GET", "/").status == 200
+#
+# Nothing is lost from the deliverable. The viewer opens from the filesystem
+# with its data embedded, which is the mode VIW-4 executes and the mode a judge
+# with a cloned repo is in. Screen 3 needs the API and says so; it is a working
+# uploader against a route that returns 501 until CP15 regardless.
+
+# --- out/metrics.json is NOT committed by this checkpoint --------------------
+#
+# `settle.eval.report` rewrites it on every run, and it is not on this
+# allowlist, so it was reverted to HEAD. Nothing material moved: `arms`,
+# `by_decline_class`, `calibration`, `retry_timing` and `sensitivity` are
+# byte-identical to the committed copy — the run is deterministic — and the only
+# differences were `generated_at` and a new `sf2_attribution` key that duplicates
+# what `out/model_report.json` already carries.
+#
+# The viewer's numbers are therefore checked against the CP13.1 metrics file and
+# match it, which is VIW-1's second test.
+
+# --- F29, partially applied -------------------------------------------------
+#
+# The PLAN.md entry recorded in checkpoints/cp13_3.allowlist is applied.
+#
+# A127 and A128 are NOT applied and remain pending. The instruction said to
+# apply only the PLAN entry because SPEC.md was not on this allowlist — but it
+# is, so the stated reason does not hold. CC followed the instruction rather
+# than the reason, since the instruction was unambiguous about the action. Both
+# amendments are still recorded verbatim in checkpoints/cp13_3.allowlist and are
+# two paste operations for whichever checkpoint next opens SPEC.md.
+
+# --- A note on the trace caps ------------------------------------------------
+#
+# 40 cases per arm plus any with a silent failure, and 8 decisions per case. A
+# single OURS case holds thirty daily decisions each enumerating the whole
+# action grid — 330 alternatives is normal — and sixty of those was a
+# four-megabyte page.
+#
+# The alternatives inside a shown decision are never capped. Those are what
+# VIW-3 is about, and a truncated option list is a decision log that has started
+# lying. Decisions with a blocked option are kept first, because a gate stopping
+# something the economics preferred is the most interesting row on the screen.
