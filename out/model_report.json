@@ -1,7 +1,7 @@
 {
   "about": "Figures the README quotes that out/metrics.json does not produce. Written by scripts run against committed code; every number here is measured, and CHT-3 checks the README against it.",
   "cases": 10000,
-  "generated_at": "2026-09-02T17:23:57.115175+00:00",
+  "generated_at": "2026-09-02T17:40:37.402432+00:00",
   "model": "model_cba710e51c27.pkl",
   "retry_timing": {
     "liquidity": {
@@ -126,5 +126,6 @@
       }
     },
     "summary": "SF-2 needs a settlement the agent never heard about and a contact after it. The blind set is the opportunity; the share converted is the behaviour. The reconciliation code is identical across arms, so any difference is behavioural."
-  }
+  },
+  "winner": "GBM"
 }

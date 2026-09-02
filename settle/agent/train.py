@@ -12,9 +12,11 @@ would teach the model to predict what the webhook said, which is the one thing
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import pickle
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final
 
@@ -96,7 +98,7 @@ def cell_for(case: ObservedCase, action: Action, tick: int, last_attempt: int | 
     return (action.type.value, at.hour // 4, classify(case.decline_code).value)
 
 
-def _feature_importance(model, X_test, y_test, sample: int = 3000) -> None:
+def _feature_importance(model, X_test, y_test, sample: int = 3000) -> dict:
     """Permutation importance, model-agnostic. Answers "which did it use", not
     "which does it have a coefficient for"."""
     from sklearn.inspection import permutation_importance
@@ -120,12 +122,20 @@ def _feature_importance(model, X_test, y_test, sample: int = 3000) -> None:
         print(f"    {name:<28}{value:>+10.5f}")
     print("  the four timing features")
     lookup = dict(ranked)
+    order = [n for n, _ in ranked]
     for name in timing:
-        rank = [n for n, _ in ranked].index(name) + 1
+        rank = order.index(name) + 1
         print(f"    {name:<28}{lookup[name]:>+10.5f}   rank {rank}/{len(ranked)}")
+    return {
+        "n_features": len(ranked),
+        "ranks": {
+            name: {"rank": order.index(name) + 1, "importance": lookup[name]}
+            for name in timing
+        },
+    }
 
 
-def _timing_spread(model, rows, test_rows) -> None:
+def _timing_spread(model, rows, test_rows) -> dict:
     """EST-9. If the probability does not move with the offset, the model has
     learned nothing about timing and §9's liquidity-window claim is unsupported.
     Reported plainly either way."""
@@ -148,7 +158,7 @@ def _timing_spread(model, rows, test_rows) -> None:
             worked = (case, tick, probs)
     if not spreads:
         print("  no retry rows in the test split")
-        return
+        return {"n_offsets": len(offsets), "offsets": list(offsets), "spread": None}
 
     case, tick, probs = worked
     print(f"  worked example: {case.case_id}, tick {tick}, {case.decline_code}")
@@ -161,6 +171,16 @@ def _timing_spread(model, rows, test_rows) -> None:
     if spreads[len(spreads) // 2] < 0.005:
         print("  FINDING: the probability barely moves with the offset. The model has")
         print("           learned little about timing; §9's liquidity claim is unsupported.")
+    return {
+        "n_offsets": len(offsets),
+        "offsets": list(offsets),
+        "spread": {
+            "n_retry_rows": len(spreads),
+            "median": spreads[len(spreads) // 2],
+            "p90": spreads[int(len(spreads) * 0.9)],
+            "max": spreads[-1],
+        },
+    }
 
 
 # Resolution is a property of the decisions the policy will actually face, so it
@@ -201,6 +221,96 @@ def _resolution_probe(rows, test_rows, n: int = probe_size) -> list[tuple]:
     return out[:n]
 
 
+
+# The two timing hypotheses, and why they are written here rather than measured
+# downstream. Until CP13.2 these figures existed only in this module's stdout,
+# the README quoted them from a training log, and the quoted values were stale —
+# they predated A93 and reproduced nothing. A number a test cannot check is a
+# number that drifts, so training writes them.
+LIQUIDITY_FEATURES: Final[tuple[str, ...]] = (
+    "day_of_month_at_dispatch",
+    "days_to_month_start",
+    "in_liquidity_window",
+)
+RECENCY_FEATURES: Final[tuple[str, ...]] = ("days_since_last_attempt",)
+
+# What the README carried until CP13.1, kept so the correction stays auditable
+# rather than becoming a silent edit.
+SUPERSEDED_TIMING: Final[dict] = {
+    "note": (
+        "What the README carried until CP13.1, from a training log predating "
+        "A93. Recorded so the correction is auditable rather than a silent edit."
+    ),
+    "median_spread_points": 3.7,
+    "rank_range": "26-37",
+    "n_features": 45,
+}
+
+
+def write_model_report(path: Path, winner: str, model_name: str,
+                       importance: dict, timing: dict) -> None:
+    """Write the timing block of `out/model_report.json`, preserving the rest.
+
+    Merged rather than overwritten, and the reason is INV-8. This module is in
+    `settle/agent/`, which may not import `settle.sim`, so it cannot run an arm
+    and cannot produce the SF-2 decomposition that shares this file — that block
+    is written by the evaluation side, which is allowed to build a world. A
+    training run that clobbered it would be the agent package deleting evidence
+    it is not entitled to generate.
+
+    Same reason `liquidity.sensitivity` is left alone: it comes from the
+    parameter sweep, which is an evaluation artefact.
+    """
+    report: dict = {}
+    if path.exists():
+        with contextlib.suppress(json.JSONDecodeError, OSError):
+            report = json.loads(path.read_text(encoding="utf-8"))
+
+    ranks = importance["ranks"]
+    liquidity_ranks = {n: ranks[n] for n in LIQUIDITY_FEATURES if n in ranks}
+    recency_ranks = {n: ranks[n] for n in RECENCY_FEATURES if n in ranks}
+
+    report.setdefault("about", (
+        "Figures the README quotes that out/metrics.json does not produce. "
+        "The timing block is written by settle.agent.train at training time; "
+        "the SF-2 decomposition is written by the evaluation side, which is the "
+        "only part permitted to run an arm."
+    ))
+    report["generated_at"] = datetime.now(tz=timezone.utc).isoformat()
+    report["model"] = model_name
+    report["winner"] = winner
+
+    block = report.setdefault("retry_timing", {})
+    block["summary"] = (
+        "Two hypotheses were tested and they came apart. Liquidity timing is "
+        "withdrawn; recency survived. Reporting them together as one set of "
+        "'timing features' understated one and overstated the other."
+    )
+    block["n_features"] = importance["n_features"]
+    block["n_offsets"] = timing["n_offsets"]
+    block["offsets"] = timing["offsets"]
+
+    liquidity = block.setdefault("liquidity", {})
+    liquidity["verdict"] = "withdrawn — SPEC §10.1, A83"
+    liquidity["hypothesis"] = "retries near payday recover more"
+    liquidity["feature_ranks"] = liquidity_ranks
+    liquidity["rank_best"] = min((v["rank"] for v in liquidity_ranks.values()), default=None)
+    liquidity["rank_worst"] = max((v["rank"] for v in liquidity_ranks.values()), default=None)
+
+    recency = block.setdefault("recency", {})
+    recency["verdict"] = "survived"
+    recency["hypothesis"] = "how long since the last attempt matters"
+    recency["feature_ranks"] = recency_ranks
+    recency["rank_best"] = min((v["rank"] for v in recency_ranks.values()), default=None)
+    recency["offset_spread"] = timing["spread"]
+
+    block["superseded_figures"] = SUPERSEDED_TIMING
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"model report -> {path}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="settle.agent.train", description=__doc__)
     parser.add_argument("--explore", type=Path, default=Path("out/explore.decisions.jsonl"))
@@ -208,6 +318,10 @@ def main(argv: list[str] | None = None) -> int:
     # A directory, not a file. The artifact is content-addressed inside it.
     parser.add_argument("--out", type=Path, default=Path("out"))
     parser.add_argument("--cases", type=Path, default=Path("out/explore.cases.jsonl"))
+    # Deliberately not derived from --out: the report is a committed deliverable
+    # checked by CHT-3, while --out is where model artifacts land, and a run
+    # that trained into a scratch directory should still be able to refresh it.
+    parser.add_argument("--model-report", type=Path, default=Path("out/model_report.json"))
     args = parser.parse_args(argv)
 
     rows, y, case_ids = load_rows(args.explore, args.labels, args.cases)
@@ -347,11 +461,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"    ... and {len(thin) - 12} more")
 
     # Which features the model actually used, on the timing question.
-    _feature_importance(model, Xte, yte)
+    importance = _feature_importance(model, Xte, yte)
 
     # EST-9 — does the probability move with the offset at all?
     print(f"\ntiming signal ({winner}) — same case, same verb, eight offsets")
-    _timing_spread(model, rows, test.rows)
+    timing = _timing_spread(model, rows, test.rows)
 
     print(f"\nshipping: {winner} (lower uplift ECE on held-out test — A84)")
 
@@ -384,6 +498,8 @@ def main(argv: list[str] | None = None) -> int:
     (out_dir / LATEST_POINTER).write_text(artifact.name + "\n", encoding="utf-8")
     print(f"model -> {artifact}")
     print(f"latest -> {out_dir / LATEST_POINTER}   ({artifact.name})")
+
+    write_model_report(args.model_report, winner, artifact.name, importance, timing)
     return 0
 
 

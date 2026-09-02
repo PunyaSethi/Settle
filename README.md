@@ -61,25 +61,15 @@ reached the agent, so OURS believed it had recovered 4,146 cases when 5,122 had
 settled. The concrete harm is not a wrong number on a dashboard — it is 976
 customers who had already paid and were still being chased.
 
-That is SF-2, and it is where restraint stops being an efficiency argument:
+OURS and B2 end the run equally blind: 1,114 and 1,112 settled cases whose
+confirmation never reached the agent. Same ignorance, same customers. The fixed
+ladder contacted 7.7% of them anyway. OURS contacted 0.1%.
 
-| arm | SF-2 — settled, never reported, contacted again |
-|---|---|
-| **OURS** | **1** |
-| B2 fixed ladder | 86 |
-| B3 max pressure | 35 |
-| B1 single retry | 0 |
-| B0 do nothing | 0 |
+That comparison controls for the obvious objection — that we chased fewer
+because we contact less. Both arms were wrong about the same number of
+customers. Only one kept calling them.
 
-86 customers paid B2 and were contacted again anyway. OURS did this once. That
-gap follows from OURS making 36 contacts in total, not from a better auditor:
-the reconciliation code is identical across arms.
-
-B3's 35 is lower than B2's 86, and it is not restraint — B3 makes 24,780
-contacts against B2's 14,027. SF-2 needs two things, a settlement the agent never
-heard about *and* a contact after it, so the count alone conflates being rarely
-in a position to make the mistake with being disciplined about not making it.
-Split apart:
+In counts, that is 86 against 1:
 
 | arm | settled | blind set — settled, never reported | SF-2 | share of blind set |
 |---|---|---|---|---|
@@ -89,16 +79,14 @@ Split apart:
 | B1 | 3,655 | 1,608 | 0 | 0.0% |
 | B0 | 2,251 | 2,251 | 0 | 0.0% |
 
-B3's advantage over B2 is mostly opportunity, not judgement: acting more means
-more of its settlements get reported at all, so its blind set is half the size.
+The reconciliation code is identical across arms, so nothing here is a better
+auditor — it is the same auditor watching arms that behave differently.
 
-**OURS and B2 have almost identical blind sets — 1,114 against 1,112 — and that
-is the comparison worth making.** Facing the same ignorance about the same number
-of customers, the fixed ladder chased 7.7% of them and `settle` chased 0.1%. The
-observability is the same; what differs is what each does when it cannot see.
-
-B1's zero is not virtue. It has the second-largest blind set and stops after one
-retry, before the settlements land.
+B3's 35 looks better than B2's 86 and mostly is not: B3 makes 24,780 contacts
+against B2's 14,027, and its advantage is opportunity rather than judgement.
+Acting more means more of its settlements get reported at all, so its blind set
+is half the size. B1's zero is not virtue either — it has the second-largest
+blind set and stops after one retry, before the settlements land.
 
 ### Restraint
 

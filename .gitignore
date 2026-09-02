@@ -25,6 +25,13 @@ out/*
 # which made a data file sit in an images directory.
 !out/metrics.json
 
+# The timing figures train.py writes and the SF-2 decomposition the evaluation
+# side adds. Committed for the same reason as metrics.json: CHT-3 checks the
+# README against it. Added with `git add -f` at CP13.2 and CP13.3 before this
+# line existed, which is the workaround out/razorpay_demo.json needed between
+# CP12 and CP12.1.
+!out/model_report.json
+
 # The raw Razorpay webhook events stay on the machine that received them.
 # Razorpay's checkout SMS-verifies the payer's phone number, so a real payment
 # carries a real mobile number. out/razorpay_demo.json publishes a contact-free
