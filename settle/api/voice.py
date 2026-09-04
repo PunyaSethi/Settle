@@ -10,13 +10,18 @@ Clip 3 is the case that matters: a hedged reply where the honest answer is that
 nothing happens, and the screen has to make "nothing happened" legible rather
 than looking like a failed request.
 
-Raw body, not multipart
------------------------
-The audio arrives as the request body. FastAPI's `UploadFile` needs
-`python-multipart`, which this project does not pin, and adding an undeclared
-dependency would make the endpoint work here and fail for anyone cloning the
-repo — the same trade CP12 made over `httpx`. The webhook already reads raw
-bytes for its own reasons, so the shape is not new.
+Multipart, now that it is declared
+----------------------------------
+The audio arrives as a file field. At CP15 it arrived as the raw request body,
+because `UploadFile` needs `python-multipart` and that was not pinned — shipping
+an undeclared dependency would have made the endpoint work here and fail for
+anyone cloning the repo, the same trade CP12 refused over `httpx`. CP16 pins it,
+so the route takes the ordinary form upload a browser sends.
+
+A raw body is still accepted. Anything posted without a multipart content type
+is read as the audio itself, which keeps `curl --data-binary` working and means
+the CP15 shape did not become a breaking change for a demo script written
+against it.
 
 Anchored, never clocked
 -----------------------
@@ -33,7 +38,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Final
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from settle.text.promise import extract
@@ -90,13 +95,27 @@ def trace(audio: Path, anchor: date, *, allow_api: bool = True) -> dict[str, Any
     }
 
 
+async def _audio_from(request: Request, upload: UploadFile | None) -> tuple[bytes, str]:
+    """The audio and its filename, from a form field or from the raw body."""
+    if upload is not None:
+        return await upload.read(), Path(upload.filename or "upload.ogg").name
+    body = await request.body()
+    return body, Path(request.headers.get(FILENAME_HEADER, "upload.ogg")).name
+
+
 @router.post("/voice/extract")
-async def voice_extract(request: Request) -> JSONResponse:
+async def voice_extract(
+    request: Request,
+    audio_file: UploadFile | None = File(default=None, alias="audio"),
+) -> JSONResponse:
     """One audio file in, one full extraction trace out."""
-    audio = await request.body()
+    audio, name = await _audio_from(request, audio_file)
     if not audio:
         return JSONResponse(
-            {"reason_code": "NO_AUDIO", "detail": "the request body is empty"},
+            {
+                "reason_code": "NO_AUDIO",
+                "detail": "no `audio` file field and no request body",
+            },
             status_code=400,
         )
     if len(audio) > MAX_BYTES:
@@ -108,7 +127,6 @@ async def voice_extract(request: Request) -> JSONResponse:
             status_code=413,
         )
 
-    name = Path(request.headers.get(FILENAME_HEADER, "upload.ogg")).name
     suffix = Path(name).suffix.lower()
     if suffix not in SUFFIXES:
         return JSONResponse(

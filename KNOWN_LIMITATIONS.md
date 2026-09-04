@@ -76,6 +76,38 @@ and are violations we are not counting. We report this rather than quietly
 moving the constant to whichever value makes our compliance column look better.
 (SPEC §12, A98)
 
+### `next_month` is located on the demo path only
+
+`settle/text/promise.py` recognises one span kind the batch classifier does not:
+`agle mahine` / "next month". It is located and then always rejected — a month
+with no day is not a commitment — and it exists so the voice trace can show clip
+1's first answer being considered and set aside rather than never looked at.
+
+`settle/text/classify.py`, which the 10,000-case batch runs on, has no equivalent
+pattern. A reply saying only "next month" is `unclear` there and escalates.
+
+**What it costs.** The two paths locate slightly different sets of spans, so the
+voice lab is not a faithful preview of what the batch would do with the same
+sentence — it is a preview plus one span the batch would not have seen. The
+verdict is identical in every case we have, because the extra span is always
+rejected, but "identical because the difference is always discarded" is a weaker
+guarantee than "identical". A reader watching the voice lab should not assume the
+batch does exactly this. If the two are ever meant to be the same locator, the
+pattern belongs in `classify.py` and the demo path should have nothing of its
+own.
+
+### Clip 2's transcript is not what was said
+
+Intended: "ek hafte mein bhej dunga bhai, **abhi nahi hai** mere paas."
+Returned: "Ek hafte mein bhej dunga, **paise bhi nahi hain** mere paas."
+
+**What it costs.** Nothing for the extraction — the date span is "ek hafte" and
+the meaning is preserved, both readings being "I do not have it right now". But
+it is a second instance of the same class as the clip 1 truncation: the
+transcript reads as fluent and complete while differing from the audio, and
+nothing downstream can tell. It was not re-recorded, because re-recording until
+the transcript matches would be selecting the fixture to flatter the model.
+
 ### The Razorpay edge is one link, not a load test
 
 Three webhook deliveries, one case, one payment.

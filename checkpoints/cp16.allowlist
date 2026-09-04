@@ -1,0 +1,52 @@
+# CP16 — final tidy. The last code commit before submission.
+#
+# F33  .gitignore audited against every path in `git ls-files out/`.
+# F34  python-multipart pinned; /voice/extract takes an UploadFile.
+# F35  The transcription findings moved into README results.
+# F36  next_month's demo-path-only scope, and clip 2's variance, recorded.
+# F37  Every README number re-verified against its artefact by hand.
+
+.gitignore
+requirements.txt
+settle/api/voice.py
+KNOWN_LIMITATIONS.md
+README.md
+SPEC.md
+PLAN.md
+checkpoints/cp16.allowlist
+
+# --- Why the audit rather than a fourth one-line fix -------------------------
+#
+# `git check-ignore` short-circuits on tracked files and reports nothing, so the
+# obvious check says every committed artefact is fine. `--no-index` asks the
+# question properly: would this path be ignored if it were untracked? Two were —
+# out/razorpay_demo.json and out/voice_demo.json — tracked only because they had
+# been force-added at a checkpoint whose allowlist excluded .gitignore.
+#
+# That is now nine committed artefacts and nine negations, verified in both
+# directions: every tracked path is committable, and every run artefact
+# (llm_cache, batch, audit_*, sensitivity, model pickles, razorpay_raw,
+# razorpay_demo_state) is still ignored.
+
+# --- The raw-body path on /voice/extract is kept, not replaced ---------------
+#
+# F34 asked for UploadFile and that is what the route takes. It also still reads
+# a raw body when the content type is not multipart, because `viewer/index.html`
+# posts that way and the viewer is not on this allowlist.
+#
+# Keeping it is the better shape regardless. Breaking the endpoint's only caller
+# in order to adopt a tidier signature would be a refactor charged to the demo,
+# two days before submission, for no behaviour a judge sees. Both paths are
+# exercised: multipart returns 200 with the full trace, raw body returns the
+# same trace, and the error paths (400 empty, 415 wrong suffix) are unchanged.
+
+# --- F37: one gap found, in the direction that matters least ------------------
+#
+# 46 curated figures checked by hand against out/metrics.json,
+# out/model_report.json, out/razorpay_demo.json and out/voice_demo.json, then a
+# full token sweep of the prose against every artefact plus PRIORS and SPEC.
+#
+# Nothing in the README was unbacked. The single discrepancy ran the other way:
+# `pay_TWrJELO1R1PGeA`, the declined payment, was in the artefact and not in the
+# README, so the sentence claiming "a real decline beside a real capture" named
+# only the capture. The id is in the table now, and the claim is checkable.

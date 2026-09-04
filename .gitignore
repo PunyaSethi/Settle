@@ -37,6 +37,17 @@ out/*
 # in viewer/index.html.
 !out/viewer_data.json
 
+# The Razorpay edge artefact and the voice replay. Both needed `git add -f` at
+# the checkpoint that created them, because `.gitignore` was not on that
+# checkpoint's allowlist — the third time in a row, which is what prompted the
+# audit here.
+#
+# Everything committed under `out/` now carries its own negation, so nothing is
+# tracked only because it was once forced in. Audited at CP16 against every path
+# in `git ls-files out/`.
+!out/razorpay_demo.json
+!out/voice_demo.json
+
 # The raw Razorpay webhook events stay on the machine that received them.
 # Razorpay's checkout SMS-verifies the payer's phone number, so a real payment
 # carries a real mobile number. out/razorpay_demo.json publishes a contact-free

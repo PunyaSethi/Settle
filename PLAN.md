@@ -359,4 +359,42 @@ F31: A127 and A128 applied, pending since CP13.3. F32: `GET /` serves the viewer
 and the CP12 assertion that it returns 501 is updated — both files were open,
 which is why it waited.
 
-Next is the video.
+## CP16 — final tidy
+
+The last code commit before submission. No behaviour changed that a judge will
+see; four things that were owed got paid.
+
+**The `.gitignore` audit.** `out/razorpay_demo.json` and `out/voice_demo.json`
+were tracked only because they had been force-added at checkpoints whose
+allowlists excluded `.gitignore`. Third occurrence, so this was an audit rather
+than a fourth one-line fix: every path in `git ls-files out/` was checked with
+`git check-ignore --no-index`, which is the only way to ask the question of an
+already-tracked file. Nine committed artefacts, nine negations, and every run
+artefact still ignored.
+
+**`python-multipart` pinned, `/voice/extract` on `UploadFile`.** The CP15 raw-body
+shape is still accepted, deliberately: the viewer posts that way and
+`viewer/index.html` was not on this allowlist. A route that broke its only caller
+to adopt a tidier signature would be a refactor charged to the demo.
+
+**The transcription findings moved into README results.** They were the strongest
+"what broke" material in the project and they were sitting in a limitations file.
+Urdu instead of Devanagari, a silently truncated clause, and three different
+strings from four calls on identical audio — with the before/after on the same
+clip, so a reader can see what one sentence of prompt was worth.
+
+**Known Limitations gained two entries.** `next_month` is located on the demo
+path only, so the voice lab is a preview of the batch plus one span the batch
+would not see — identical verdicts, but identical because the difference is
+always discarded, which is weaker than identical. And clip 2's transcript differs
+from what was said: same meaning, date unaffected, not re-recorded, because
+re-recording until the transcript matches would be selecting the fixture to
+flatter the model.
+
+**F37, the hand check.** Every number in the README prose was extracted and
+matched against the committed artefacts — 46 curated figures plus a full token
+sweep. One gap: the declined payment id was in `out/razorpay_demo.json` and not
+in the README, so the "a real decline beside a real capture" claim named only the
+capture. Added. Nothing in the README is unbacked.
+
+The code is done. Next is the video.

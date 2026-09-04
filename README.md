@@ -144,6 +144,53 @@ ladder wins. That flip is in exactly the direction you would guess.
 
 ---
 
+### What the speech model actually did
+
+The voice lane has three AI components and this is the one that misbehaved. It
+is in the results section rather than in limitations because it is the strongest
+"what broke" material in the project.
+
+gpt-transcribe returned Urdu. Not Devanagari, which we had planned for — Arabic
+script, on all four clips, with `language='hi'` set. Every clip would have
+classified as unclear.
+
+It also truncated. Clip 1's transcript ended at "agle mahine kar dunga", silently
+dropping the self-correction that is the entire reason the clip exists. The audio
+contains it; the same bytes with a romanised-Hinglish prompt return the clause.
+
+And it was not deterministic: four calls on identical audio produced three
+different strings, one of them truncated. At temperature 0 it is stable.
+
+A transcript that reads as complete while missing the one clause the decision
+depends on is the failure class this project is named for. It was found on the
+last day it could have been.
+
+| | clip 1, same audio |
+|---|---|
+| `language="hi"`, no prompt | `'ہاں دیکھو ابھی تھوڑا ٹائٹ چل رہا ہے۔ اگلے مہینے کر دوں گا۔'` |
+| + romanised-Hinglish prompt, `temperature=0` | `'haan dekho abhi thoda tight chal raha hai, agle mahine kar dunga. Chalo nahi pandrah tareekh tak ho jayega.'` |
+
+The fix is a sentence of context and a temperature, and both are correctness
+settings rather than preferences. `PROMPT_VERSION` is part of the transcript
+cache key, so changing either invalidates the transcripts it produced instead of
+serving them under a configuration that no longer exists — a cached transcript
+from the un-prompted run would otherwise outlive the bug that created it.
+
+The four clips, extracted against the case's `created_at` and never a clock:
+
+| clip | verdict | date | what it demonstrates |
+|---|---|---|---|
+| 1 | `promise` | 2026-01-15 | `agle mahine` located and **rejected**, `pandrah tareekh` accepted |
+| 2 | `promise` | 2026-01-17 | `ek hafte mein` — a gap, not a value; code does the arithmetic |
+| 3 | `hedged` | — | **sets nothing.** No promise, no suppression window |
+| 4 | `opt_out` | — | `opted_out` set, S4 fires |
+
+Clip 3 is the one worth watching. Anyone can pull a date out of clip 1. Refusing
+to log "haan theek hai, dekhta hoon, baad mein baat karte hain" as a promise —
+and therefore not suppressing contact for three weeks on a customer who was being
+polite — is the judgement call, and it is a decision to do nothing, which is the
+hardest kind to show working.
+
 ## 2. Architecture
 
 ```mermaid
@@ -432,6 +479,7 @@ by a real webhook through a real tunnel.
 |---|---|
 | Payment link | `plink_TWr7e2EFJ8ITvn` |
 | Payment (captured) | `pay_TWrM4OohnxgMOu` |
+| Payment (declined) | `pay_TWrJELO1R1PGeA` |
 | Order | `order_TWr8cmMDYa9lph` |
 | Joined to case | `case_000000` — ₹3,256.35, card, `insufficient_funds` |
 | Webhooks received | `payment.failed`, `payment.captured`, `payment_link.paid` |
