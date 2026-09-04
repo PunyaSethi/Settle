@@ -1,0 +1,49 @@
+# CP16.1 — serve the charts.
+#
+# The viewer rendered its charts at file:// and not at http://127.0.0.1:8002/.
+# `viewer/index.html` asks for `../out/charts/<name>.png`; from the filesystem
+# that resolves against the repo tree, and served from `/` it resolves to
+# `/out/charts/<name>.png`, which had no route. The page was correct in one
+# origin and silently broken in the other.
+#
+# The broken origin is the one that matters most for a live demo: screen 3 needs
+# the API, so a judge who started the server to try the voice lab was the judge
+# looking at a results screen with four empty boxes on it.
+
+settle/api/app.py
+viewer/index.html
+tests/test_viewer.py
+checkpoints/cp16_1.allowlist
+
+# --- Mounted, not routed ------------------------------------------------------
+#
+# `app.mount("/out/charts", StaticFiles(...))`. A mount is a sub-application and
+# does not enter the OpenAPI schema, so SPEC §16's "exactly three routes" is
+# untouched and `test_WBH_1_the_app_declares_exactly_the_three_spec_routes`
+# passes unchanged — which matters, because `tests/test_webhook.py` is not on
+# this allowlist.
+#
+# CP14 tried the other shape: an `@app.get("/out/{asset:path}")` handler. That
+# is a fourth route, it broke the §16 assertion, and it was dropped. The mount is
+# what CP14 should have used and did not.
+#
+# `viewer/index.html` is unchanged. It was on the allowlist in case the paths had
+# to move, and they did not — the whole point of fixing this at the server is
+# that `../out/charts/<name>.png` keeps working from `file://`, which is where a
+# judge with a cloned repo and nothing running actually is.
+
+# --- VIW-6 ---------------------------------------------------------------------
+#
+# Five tests, and the chart list is parsed out of the page rather than written
+# down, so a chart added to the viewer without a route fails here instead of
+# appearing broken to whoever opens it next.
+#
+#   file://    every src resolves to a real file under the repo
+#   http://    every src returns 200, content-type image/png, PNG magic bytes
+#   both       byte-identical between the two origins
+#   surface    the mount did not widen the OpenAPI route table
+#   scope      traversal and every other out/ path still 404
+#
+# Verified adversarially: with the mount removed, two of the five fail. VIW-4
+# still passes — screens 1 and 2 render from file:// with no server, executed
+# under Node with `fetch` throwing.

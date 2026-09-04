@@ -479,3 +479,113 @@ def test_VIW_5_the_picker_filters_have_something_behind_them() -> None:
         "the gate-block filter matches nothing"
     )
     assert len(data["filters"]["arms"]) >= 2, "the arm filter has one option"
+
+
+# --------------------------------------------------------------------------
+# VIW-6 — the charts resolve under BOTH origins
+# --------------------------------------------------------------------------
+
+def chart_srcs() -> list[str]:
+    """Every image the page actually asks for, read out of the page itself.
+
+    Parsed rather than listed, so a chart added to the viewer without a route
+    fails here instead of appearing broken to whoever opens it next.
+    """
+    html = page()
+    prefixes = re.findall(r'src:\s*"([^"]*out/charts/)"', html)
+    assert prefixes, "the page no longer builds a chart src the way this test reads"
+    data = load_data() if DATA.exists() else {"batch": {"charts": []}}
+    return [prefix + chart["file"] for prefix in prefixes
+            for chart in data["batch"]["charts"]]
+
+
+@needs_data
+def test_VIW_6_every_chart_resolves_from_the_filesystem() -> None:
+    """file:// — the mode a judge with a cloned repo and nothing running is in.
+
+    `../out/charts/x.png` is resolved against `viewer/index.html`, which is what
+    a browser does with a relative src on a file: origin.
+    """
+    for src in chart_srcs():
+        resolved = (VIEWER.parent / src).resolve()
+        assert resolved.is_file(), f"{src} does not resolve from viewer/: {resolved}"
+        assert resolved.stat().st_size > 10_000, f"{src} is empty"
+        # It has to be inside the repo, not somewhere a relative path escaped to.
+        assert REPO_ROOT in resolved.parents
+
+
+@needs_data
+def test_VIW_6_every_chart_resolves_when_served() -> None:
+    """http:// — the origin screen 3 needs, and the one that was broken.
+
+    The page asks for `../out/charts/x.png` from `/`, which a browser resolves
+    to `/out/charts/x.png`. That had no route until CP16.1, so a judge who
+    started the server to try the voice lab saw a page with no charts on it.
+    """
+    from fastapi.testclient import TestClient
+
+    from settle.api.app import app
+
+    with TestClient(app) as client:
+        assert client.get("/").status_code == 200
+        for src in chart_srcs():
+            # What the browser would request: the relative src resolved against
+            # the page's URL, which is the site root.
+            url = "/" + src.removeprefix("../")
+            response = client.get(url)
+            assert response.status_code == 200, f"{url} -> {response.status_code}"
+            assert response.headers["content-type"] == "image/png", url
+            assert response.content[:8] == b"\x89PNG\r\n\x1a\n", f"{url} is not a PNG"
+            assert len(response.content) > 10_000, f"{url} is empty"
+
+
+@needs_data
+def test_VIW_6_the_two_origins_serve_the_same_bytes() -> None:
+    """A chart that differed between origins would be worse than one missing."""
+    from fastapi.testclient import TestClient
+
+    from settle.api.app import app
+
+    with TestClient(app) as client:
+        for src in chart_srcs():
+            on_disk = (VIEWER.parent / src).resolve().read_bytes()
+            served = client.get("/" + src.removeprefix("../")).content
+            assert on_disk == served, f"{src} differs between file:// and http://"
+
+
+def test_VIW_6_the_mount_does_not_widen_the_api_surface() -> None:
+    """SPEC §16 fixes the route table at exactly three.
+
+    `StaticFiles` is a sub-application rather than a route, so it does not enter
+    the OpenAPI schema — which is why the charts could be served without the
+    fourth route CP14 rejected for exactly this reason.
+    """
+    from settle.api.app import app
+
+    declared = {
+        (path, method.upper())
+        for path, operations in app.openapi()["paths"].items()
+        for method in operations
+    }
+    assert declared == {
+        ("/webhooks/razorpay", "POST"),
+        ("/voice/extract", "POST"),
+        ("/", "GET"),
+    }, "the chart mount widened the API surface"
+
+
+def test_VIW_6_the_mount_serves_only_the_charts() -> None:
+    """Read-only, and scoped to one directory of committed images.
+
+    A viewer convenience is not a reason to hand out arbitrary file reads, so
+    the mount is checked for what it refuses as well as what it serves.
+    """
+    from fastapi.testclient import TestClient
+
+    from settle.api.app import app
+
+    with TestClient(app) as client:
+        for escape in ("/out/charts/../metrics.json", "/out/charts/../../SPEC.md",
+                       "/out/metrics.json", "/out/viewer_data.json"):
+            assert client.get(escape).status_code == 404, f"{escape} was served"
+        assert client.post("/out/charts/reliability.png").status_code in {404, 405}
