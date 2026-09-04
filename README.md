@@ -45,6 +45,13 @@ opt-out — and a 51.87% silent failure rate. It is the upper bound on what an
 unguarded system extracts, printed so the cost of the guardrails is visible
 rather than assumed away.
 
+**The fourth point on that chart is HYBRID, and it is not an arm we ran against
+ourselves.** It is OURS and the fixed ladder composed and routed by decline
+class, built after the per-class table below showed the whole margin sitting in
+one class. It recovers more than we do and contacts 255x as many people to get
+it. It is marked COMPOSED on the chart for that reason, and §8 has the trade in
+full.
+
 ### The two rows nobody else prints
 
 **Silent failure rate** is what the reconciliation pass finds by comparing the
@@ -344,6 +351,14 @@ step. Screens 3 and 4 need the API and say so when opened from disk:
 uvicorn settle.api.app:app --port 8002    # then http://127.0.0.1:8002/
 ```
 
+The server is four routes and cannot quietly become five: `GET /` serves the
+viewer, `POST /voice/extract` extracts a promise from audio, `POST /policy/decide`
+prices a case, `POST /webhooks/razorpay` receives the real webhook. SPEC §16
+fixes that set and two tests assert it exactly rather than as a minimum, so
+adding a route means amending the spec first — which is how `/policy/decide` got
+there. The charts are served by a static mount rather than a route, which is why
+serving them did not widen the surface.
+
 **Screen 4 prices a case you type.** `POST /policy/decide` runs the same
 `legal_actions`, the same `policy.choose` and the same estimator as the
 10,000-case run, and renders through screen 2's table — so the live answer is
@@ -440,7 +455,7 @@ Full table with per-row citations: [`PRIORS.md`](PRIORS.md).
 
 Full list, with the cost of each: **[`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md)**.
 
-The five that would change how you read the numbers above:
+The six that would change how you read the numbers above:
 
 1. **The auditor is validated only in simulation.** The reconciliation mechanism
    transfers to production — against live Razorpay it is a lagged batch join on
@@ -465,9 +480,12 @@ The five that would change how you read the numbers above:
    alternative — attribution windows — is where recovery products go to flatter
    themselves.
 
-5. **The margin is one decline class.** `auth_abandoned` carries all of it, and
-   OURS loses to the fixed ladder on four of the other five. See the results
-   section above; it is a fact about the result rather than a caveat on it.
+5. **The margin is one decline class, and routing it away costs 3.5 points.**
+   `auth_abandoned` carries all of it, and OURS loses to the fixed ladder on four
+   of the other five. Routing each class to whichever arm wins it — HYBRID, §8 —
+   recovers 31.87% against our 28.37%, and pays 255x the contacts for the
+   difference. We forgo those points deliberately. It is a fact about the result
+   and a choice with a price, not a caveat on either.
 
 6. **Three world bugs shipped and were fixed during the build**, each of which
    invalidated a headline first: scheduling fired immediately, dead instruments

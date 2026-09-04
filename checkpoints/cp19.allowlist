@@ -1,0 +1,76 @@
+# CP19 — README audit against HEAD cf7da2a. Read-only first.
+
+README.md
+KNOWN_LIMITATIONS.md
+checkpoints/cp19.allowlist
+
+# --- PART A. What the audit found ---------------------------------------------
+#
+# 1. HYBRID Next Steps paragraph            PRESENT. Every figure re-derived
+#                                           from out/metrics.json: 31.87/28.37,
+#                                           9,192 vs 36, 285 vs 1, 2.34x,
+#                                           5.4% vs 0.1%, +3.50 pts, 255x.
+#                                           Rs 227,318 is 227,317.50 rounded.
+# 2. HYBRID in the metrics table            NOT in §1's table, and left that
+#                                           way — §1 compares OURS against
+#                                           baselines and HYBRID is not one.
+#    HYBRID on chart 1, marked COMPOSED     PRESENT on the chart. MISSING from
+#                                           the prose: §1 explained B3's point
+#                                           and said nothing about the fourth.
+#                                           FIXED.
+# 3. Known Limitations, 3.5 points by design PRESENT in the file, two entries.
+#                                           MISSING from README §7's short
+#                                           list, which is what a judge reads.
+#                                           FIXED, folded into item 5.
+# 4. Screen 4                               PRESENT. The brief's premise was
+#                                           stale — CP18 wrote §4's uvicorn
+#                                           block, the preset table and the
+#                                           excluded-vs-blocked paragraph, and
+#                                           the run instructions already say
+#                                           "Screens 3 and 4 need the API",
+#                                           matching the viewer's four tabs.
+# 5. The four routes                        The README stated no route count at
+#                                           all, so nothing was stale. ADDED.
+# 6. Test count                             The README states none. NOT ADDED —
+#                                           see the blocked item below.
+# 7. The preset correction (A151)           MISSING from both files. ADDED to
+#                                           KNOWN_LIMITATIONS.md with a cost.
+# 8. Figures predating CP17                 NONE stale. All eleven rows of §1
+#                                           and all eight of §8 re-derived from
+#                                           out/metrics.json and matched
+#                                           exactly, including the SF
+#                                           decomposition (SF-1 138, SF-7 36,
+#                                           B2 SF-4 255) and the blind-set
+#                                           table. CHT-3 green before and after.
+#
+# Also found, off the list: README §7 said "The five that would change how you
+# read the numbers above" and listed six. FIXED.
+
+# --- Blocked: the test count --------------------------------------------------
+#
+# The README says nothing about the size of the suite, and adding "769 tests"
+# would fail CHT-3: no committed artefact carries that number, and CHT-3 is the
+# test that requires one. The two ways past it are both wrong.
+#
+#   - Put it in a fenced code block. CHT-3 strips those before extracting
+#     numbers, so it would pass while checking nothing. That is gaming our own
+#     guard in the README the guard exists to protect.
+#   - Add "769" to STRUCTURAL in tests/test_charts.py, which is not on this
+#     allowlist, and which would exempt a figure that is neither structural nor
+#     stable.
+#
+# Left out and reported instead. The honest fix is for the suite to write its
+# own count to an artefact, which is a code change on a documentation
+# checkpoint.
+
+# --- Reported, not fixed: out/ is not on this allowlist -----------------------
+#
+# out/metrics.json carries meta.checkpoint = "CP13.1" and contains HYBRID, which
+# CP17 added. The artefact every README number traces to mislabels its own
+# vintage. Regenerating it is a 10,000-case run and out/ is not allowlisted.
+#
+# CHT-3 checks existence, not derivation. "255x the contacts" is 9,192/36, and
+# no field in metrics.json holds that ratio — it passes because 255 is B2's
+# SF-4 count. The same is true of 2.34x and 3.5 points. The check catches
+# invented numbers and does not catch a derived one that is wrong, and every
+# such ratio in the README was re-derived by hand for this audit instead.

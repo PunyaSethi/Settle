@@ -96,6 +96,32 @@ batch does exactly this. If the two are ever meant to be the same locator, the
 pattern belongs in `classify.py` and the demo path should have nothing of its
 own.
 
+### Two of screen 4's three presets demonstrated nothing
+
+They were built on `time_shiftable`, whose viable verb set under §9 is
+`{do_nothing, retry}`. One was there to show G1 blocking a contact at 02:00; the
+other to show G6 suppressing contact against a live promise. Neither gate had a
+contact verb to act on, because the decline class had never made one a candidate.
+
+Both screens rendered a correct table. Every probability, every expected value
+and every gate verdict on them was right. They simply did not contain the thing
+the button existed to show, and nothing about them looked wrong — no error, no
+missing row, no number out of place. Both presets moved to `do_not_honour`,
+`ambiguous` being the only class carrying a retry and a message at once.
+
+The tick-0 anchor moved with them, from 00:30 to 04:30 UTC, because 06:00 IST is
+outside G1's window and a judge pressing Decide on an untouched form would
+otherwise have met a contact blocked by the clock before choosing anything.
+
+**What it costs.** Nothing now — the presets were corrected before they shipped
+and DEC-3 posts each one to the live endpoint and asserts the gate it claims by
+name, so a preset that stops demonstrating its mechanism fails rather than goes
+quiet. What it costs is the assumption that the demo surface is exempt. This is
+SF-2's shape exactly, on the one screen a judge was going to use: internally
+consistent, confidently rendered, and silent about the fact that it had stopped
+saying anything. It was caught by reading §9's verb sets, not by looking at the
+screen, and the screen is where we had been looking.
+
 ### Clip 2's transcript is not what was said
 
 Intended: "ek hafte mein bhej dunga bhai, **abhi nahi hai** mere paas."
