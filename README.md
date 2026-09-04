@@ -453,9 +453,37 @@ The five that would change how you read the numbers above:
 
 ## 8. Next steps
 
-The obvious next experiment has not been run: a hybrid applying OURS to
-auth_abandoned and the fixed ladder elsewhere would likely beat both. We are
-reporting the policy we built and measured, not the one this result implies.
+The margin is concentrated in one decline class. We tested the obvious
+alternative: route auth_abandoned to our policy and the fixed ladder everywhere
+else. HYBRID recovers 31.87% against our 28.37%, at 0.9192 contacts per case
+against our 0.0036.
+
+It recovers more. It also contacts 255 times as many people, which is the thing
+we set out not to do. We are reporting the policy we built and measured, not the
+one this result implies — and we are reporting the alternative rather than
+leaving a reader to wonder whether we tried it.
+
+| | OURS | HYBRID | B2 |
+|---|---|---|---|
+| Incremental recovery rate | 28.37% | **31.87%** | 26.65% |
+| Contacts | **36** | 9,192 | 14,027 |
+| Opt-outs induced | **1** | 285 | 411 |
+| Cost per ₹100 recovered | **₹0.0892** | ₹0.2084 | ₹0.2765 |
+| Silent failure rate | **1.75%** | 4.87% | 5.04% |
+| SF-2 — already paid, chased anyway | **1** | 50 | 86 |
+| Blind set | 1,114 | 929 | 1,112 |
+| SF-2 as a share of the blind set | **0.1%** | 5.4% | 7.7% |
+
+HYBRID composes two arms already in the table and adds nothing — no model, no
+mechanism, no parameter — so the +3.50 points is the ceiling of class-based
+routing and not a tuning result. Its per-class rates are B2's exactly on every
+ladder-routed class and OURS's exactly on `auth_abandoned`.
+
+**The restraint result does not survive routing.** HYBRID's contact volume is 66%
+of the fixed ladder's, and its SF-2 rises with it: 50 customers who had already
+paid were contacted again, against our 1. Buying 3.5 points of recovery for 255x
+the contacts and 285x the opt-outs is the trade this project exists to refuse,
+and it is the reason HYBRID is in this section rather than in the results.
 
 After that, in order:
 

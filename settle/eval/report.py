@@ -54,6 +54,7 @@ from settle.policy.escalation import is_escalation_eligible
 from settle.recon.reconcile import ReconciledCase, reconcile
 from settle.runner.arm import DoNothingArm
 from settle.runner.arms.baselines import FixedLadderArm, MaxPressureArm, SingleRetryArm
+from settle.runner.arms.hybrid import HybridArm
 from settle.runner.arms.ours import OursArm
 from settle.runner.case_runner import run_case
 from settle.schema.enums import LedgerKind, SilentFailureClass
@@ -68,6 +69,10 @@ SENSITIVITY: Final[Path] = Path("out/sensitivity.json")
 # its rows from thin cells is drawn as extrapolated.
 EXTRAPOLATED_BUCKET_FRACTION: Final[float] = 0.05
 
+# CP17. The classes HYBRID gives to OURS, mirrored here so `by_decline_class`
+# can label each row's source without importing the arm into a reporting module.
+HYBRID_OURS_CLASSES: Final[frozenset[str]] = frozenset({"auth_abandoned"})
+
 CONTACT_VERBS: Final[frozenset[str]] = frozenset(
     {"send_message", "request_mandate_update", "serve_notice", "voice_call", "escalate_human"}
 )
@@ -77,7 +82,7 @@ def _run(
     arm, batch, seed: int,
     decisions_by_case: dict | None = None,
     entries_by_case: dict | None = None,
-) -> tuple[ArmResult, dict[str, ReconciledCase]]:
+) -> tuple[ArmResult, dict[str, ReconciledCase], int]:
     """One arm over the batch, reconciled. Returns both halves.
 
     `sensitivity.run_arm` discards the reconciled dict, and the silent-failure
@@ -114,6 +119,12 @@ def _run(
             path.unlink()
             path.parent.rmdir()
 
+    # §14.4's "opt-outs induced". The reply classifier writes OPTED_OUT to the
+    # ledger when a customer asks to be left alone, so counting the reason code
+    # counts the customers an arm talked into leaving — the cost side of the
+    # contact volume the headline reports.
+    opt_outs = sum(1 for e in entries if e.reason_code == "OPTED_OUT")
+
     if entries_by_case is not None:
         for entry in entries:
             entries_by_case.setdefault(entry.case_id, []).append(entry)
@@ -130,7 +141,7 @@ def _run(
         spend_paise=sum(_action_cost(e.payload) for e in dispatches),
         cases=len(cases),
     )
-    return result, reconciled
+    return result, reconciled, opt_outs
 
 
 def _silent_failures(reconciled: dict[str, ReconciledCase]) -> dict[str, int]:
@@ -157,6 +168,10 @@ def run_arms(batch, seed: int, estimator: Estimator | None) -> dict[str, tuple]:
     ]
     if estimator is not None:
         specs.append(("OURS", OursArm(estimator)))
+        # CP17. Composed from the two arms above, so it faces the identical
+        # batch under the identical streams and its rows are comparable with
+        # theirs without qualification.
+        specs.append(("HYBRID", HybridArm(estimator)))
 
     results: dict[str, tuple[ArmResult, dict[str, ReconciledCase]]] = {}
     for name, arm in specs:
@@ -170,7 +185,7 @@ def arms_block(results: dict[str, tuple]) -> dict[str, Any]:
     """Every arm's §14.4 row. Chart 1 reads `contacts_per_case` and rate."""
     baseline = results["B0"][0]
     block: dict[str, Any] = {}
-    for name, (result, reconciled) in results.items():
+    for name, (result, reconciled, opt_outs) in results.items():
         row = arm_metrics(result, baseline)
         failures = _silent_failures(reconciled)
         n = result.cases
@@ -178,6 +193,8 @@ def arms_block(results: dict[str, tuple]) -> dict[str, Any]:
             {
                 "arm": name,
                 "mode": "OBSERVE" if name == "B3" else "ENFORCE",
+                # §14.4. HYBRID's is the number the routing experiment costs.
+                "opt_outs_induced": opt_outs,
                 "cases": n,
                 "silent_failures": failures,
                 # §7: SF-5 and SF-6 are compliance breaches, and for any arm in
@@ -220,6 +237,7 @@ def by_decline_class(batch, results: dict[str, tuple]) -> dict[str, Any]:
     b0 = results["B0"][0]
     b2 = results["B2"][0]
     ours = results["OURS"][0] if "OURS" in results else None
+    hybrid = results["HYBRID"][0] if "HYBRID" in results else None
 
     class_of = {
         generated.observed.case_id: classify(generated.observed.decline_code).value
@@ -232,14 +250,14 @@ def by_decline_class(batch, results: dict[str, tuple]) -> dict[str, Any]:
         out.setdefault(
             name,
             {"cases": 0, "b0_recovered": 0, "b2": {"cases": 0, "paise": 0},
-             "ours": {"cases": 0, "paise": 0}},
+             "ours": {"cases": 0, "paise": 0}, "hybrid": {"cases": 0, "paise": 0}},
         )
         out[name]["cases"] += 1
 
     for case_id in b0.recovered:
         out[class_of[case_id]]["b0_recovered"] += 1
 
-    for key, result in (("b2", b2), ("ours", ours)):
+    for key, result in (("b2", b2), ("ours", ours), ("hybrid", hybrid)):
         if result is None:
             continue
         for case_id in result.recovered - b0.recovered:
@@ -249,9 +267,14 @@ def by_decline_class(batch, results: dict[str, tuple]) -> dict[str, Any]:
 
     for name, row in out.items():
         n = row["cases"]
-        for key in ("b2", "ours"):
+        for key in ("b2", "ours", "hybrid"):
             row[key]["rate"] = row[key]["cases"] / n if n else 0.0
         row["ours_minus_b2_rate"] = row["ours"]["rate"] - row["b2"]["rate"]
+        # HYBRID should equal whichever arm owns the class, by construction.
+        # Recorded so a reader can check the composition rather than take it,
+        # and so a routing bug shows up as a number rather than as a surprise.
+        row["hybrid_minus_b2_rate"] = row["hybrid"]["rate"] - row["b2"]["rate"]
+        row["hybrid_source"] = "OURS" if name in HYBRID_OURS_CLASSES else "B2"
     return out
 
 
@@ -533,7 +556,7 @@ def sf2_attribution(results: dict[str, tuple]) -> dict[str, Any]:
     the comparison mean anything.
     """
     arms: dict[str, Any] = {}
-    for name, (result, reconciled) in results.items():
+    for name, (result, reconciled, _opt_outs) in results.items():
         settled = [r for r in reconciled.values() if r.actually_settled]
         blind = [r for r in settled if not r.ledger_says_recovered]
         sf2 = [
@@ -872,6 +895,7 @@ def _display_arms(arms: dict[str, Any]) -> dict[str, Any]:
             "reported_minus_reconciled_display":
                 f"{row['reported_minus_reconciled_cases']:,}",
             "compliance_violations_display": f"{row['compliance_violations']:,}",
+            "opt_outs_display": f"{row.get('opt_outs_induced', 0):,}",
         })
     return out
 
@@ -893,7 +917,7 @@ def _class_rows(classes: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _sf2_rows(sf2: dict[str, Any]) -> list[dict[str, Any]]:
-    order = ["OURS", "B2", "B3", "B1", "B0"]
+    order = ["OURS", "HYBRID", "B2", "B3", "B1", "B0"]
     rows = []
     for name in order:
         row = sf2["arms"].get(name)
@@ -911,7 +935,7 @@ def _sf2_rows(sf2: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _sf_class_rows(arms: dict[str, Any]) -> tuple[list[str], list[dict[str, Any]]]:
     names = [cls.value for cls in SilentFailureClass]
-    order = ["OURS", "B2", "B1", "B3", "B0"]
+    order = ["OURS", "HYBRID", "B2", "B1", "B3", "B0"]
     rows = [
         {"arm": name, "counts": [f"{arms[name]['silent_failures'][c]:,}" for c in names]}
         for name in order if name in arms
@@ -932,7 +956,7 @@ def viewer_block(
                           ("B3", MaxPressureArm())):
         decisions: dict[str, list] = {}
         per_case: dict[str, list] = {}
-        _, reconciled = _run(
+        _, reconciled, _opt_outs = _run(
             arm, batch, seed,
             decisions_by_case=decisions, entries_by_case=per_case,
         )

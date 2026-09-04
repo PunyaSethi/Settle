@@ -398,3 +398,34 @@ in the README, so the "a real decline beside a real capture" claim named only th
 capture. Added. Nothing in the README is unbacked.
 
 The code is done. Next is the video.
+
+## CP17 — the HYBRID arm
+
+The margin was concentrated in one decline class and the obvious experiment had
+not been run. It has now.
+
+HYBRID routes `auth_abandoned` to OURS and every other class to B2's ladder. It
+composes two arms already in the table — one `OursArm`, one `FixedLadderArm`,
+delegated to — and adds no model, no mechanism and no parameter. Routing is per
+case, on `classify(case.decline_code)`, so a case belongs to one delegate for its
+whole life; that is what makes ARM-7's byte-identity possible at all.
+
+    incremental rate    OURS 28.37%    HYBRID 31.87%    B2 26.65%
+    contacts                      36            9,192           14,027
+    opt-outs induced               1              285              411
+    cost per Rs100           0.0892           0.2084           0.2765
+    SF-2                           1               50               86
+    blind set                  1,114              929            1,112
+    SF-2 / blind set            0.1%             5.4%             7.7%
+
+It recovers 3.50 points more and contacts 255 times as many people. The restraint
+result does not survive routing: HYBRID's contact volume is 66% of the fixed
+ladder's. It goes in README Next Steps, not Results. OURS remains submitted.
+
+The per-class rates are B2's exactly on every ladder-routed class and OURS's
+exactly on `auth_abandoned` — the composition visible in the output rather than
+asserted. Nothing outside HYBRID's rows moved, checked by diffing metrics.json
+against its pre-run copy field by field.
+
+`opt_outs_induced` was listed in §14.4 from CP0 and produced by nothing. HYBRID
+is what made the gap conspicuous, and it is counted now from the ledger.

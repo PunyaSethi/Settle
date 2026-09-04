@@ -1,0 +1,79 @@
+# CP17 — the HYBRID arm. One measurement, no tuning.
+#
+# HYBRID routes auth_abandoned to OURS and every other class to B2's ladder. It
+# composes two arms already in the table and adds no model, no mechanism and no
+# parameter, so the number measures the routing rather than any tuning.
+#
+#     incremental rate    OURS 28.37%   HYBRID 31.87%   B2 26.65%
+#     contacts                     36           9,192          14,027
+#     opt-outs induced              1             285             411
+#     cost per Rs100          0.0892          0.2084          0.2765
+#     SF-2                          1              50              86
+#
+# It recovers 3.50 points more and contacts 255x as many people. README Next
+# Steps, not Results. OURS remains the submitted policy.
+
+settle/runner/arms/hybrid.py
+settle/runner/arms/__init__.py
+settle/eval/run_batch.py
+settle/eval/report.py
+out/metrics.json
+out/viewer_data.json
+viewer/index.html
+README.md
+KNOWN_LIMITATIONS.md
+tests/test_arms.py
+SPEC.md
+PLAN.md
+checkpoints/cp17.allowlist
+
+# --- Nothing outside HYBRID's rows moved --------------------------------------
+#
+# Checked rather than assumed: out/metrics.json was copied before the run and
+# diffed field by field afterwards. Every arm row, every per-class figure for B2
+# and OURS, and the calibration, retry_timing and sensitivity blocks are
+# unchanged. The only additions are HYBRID's rows and `opt_outs_induced`, which
+# §14.4 has listed since CP0 and nothing produced until now.
+
+# --- settle/eval/run_batch.py was not created ---------------------------------
+#
+# It is on this allowlist and SPEC §17 lists it, but `settle/eval/report.py`
+# already runs every arm over the batch under common random numbers, which is
+# the job. A second runner would be a second place for the six-arm comparison to
+# be defined, and the first time they disagreed the disagreement would be
+# invisible. Left absent deliberately.
+
+# --- BLOCKED: chart 1 cannot be updated from this allowlist --------------------
+#
+# The instruction is to add HYBRID to chart 1, marked as composed rather than as
+# a competitor. Neither file that requires is on this allowlist:
+#
+#     settle/eval/charts.py    draws the chart and decides the marking
+#     out/charts/*.png         the committed images
+#
+# This is not merely undone, it is failing. `charts.py` draws every arm in
+# `metrics.json`, so the moment HYBRID entered that file the committed
+# `recovery_vs_contacts.png` became stale, and CHT-1 —
+# `test_CHT_1_the_committed_charts_match_a_fresh_render` — fails. That test is
+# doing exactly its job: it exists to stop a chart drifting from the numbers it
+# draws, and the chart has drifted.
+#
+# There is no green-gate path from this allowlist. metrics.json must carry
+# HYBRID (it is the deliverable), and any metrics.json carrying HYBRID makes the
+# committed chart stale. The three ways out, in order of preference:
+#
+#   1. Add `settle/eval/charts.py` and `out/charts/` to the allowlist. Then
+#      HYBRID gets the COMPOSED marking the viewer already gives it, the PNG is
+#      regenerated, and CHT-1 passes. One `python -m settle.eval.charts` after a
+#      ~15-line change to give HYBRID its own colour and label.
+#
+#   2. Add only `out/charts/` and regenerate. HYBRID appears in chart 1 as an
+#      unmarked grey point, which is worse than the viewer's treatment of it and
+#      invites exactly the misreading the marking exists to prevent — a
+#      measurement read as a competitor.
+#
+#   3. Keep HYBRID out of metrics.json. Rejected: it is the deliverable.
+#
+# Everything else in the checkpoint is complete and passing. The viewer's batch
+# table has HYBRID marked COMPOSED, in its own colour, with a callout saying it
+# is a measurement rather than a competitor and that OURS is submitted.

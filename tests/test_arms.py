@@ -6,7 +6,10 @@ cannot serve an e-mandate notice would lose every enach case to G9 and hand us
 a win we did not earn.
 """
 
+import ast
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -14,7 +17,10 @@ from settle.audit.chain import Ledger, read_entries
 from settle.execute.executor import WorldHandle
 from settle.runner.arm import ARMS, DoNothingArm, FirstLegalArm, assert_enforce_only
 from settle.runner.arms.baselines import FixedLadderArm, MaxPressureArm, SingleRetryArm
+from settle.diagnose.taxonomy import classify
 from settle.runner.arms.explore import ExploreArm
+from settle.runner.arms.hybrid import HybridArm
+from settle.runner.arms.ours import OursArm
 from settle.runner.case_runner import run_case
 from settle.schema.action import ACTION_MODELS, Action
 from settle.schema.enums import ActionType, ArmMode, Channel, LedgerKind, Rail
@@ -241,3 +247,170 @@ def test_ARM_4_b1_does_nothing_once_it_has_retried(batch):
 
     legal = legal_actions(generated.observed, spent)
     assert SingleRetryArm().choose(generated.observed, spent, legal).type is ActionType.DO_NOTHING
+
+
+# --------------------------------------------------------------------------
+# ARM-5 / ARM-6 / ARM-7 — HYBRID. CP17, SPEC §14.1.
+#
+# HYBRID composes two arms that already exist. These assert the composition by
+# running the sources on the same cases and comparing what came out — not by
+# reading the router, which would test the code against itself and pass on a
+# router that was wrong in the same way twice.
+# --------------------------------------------------------------------------
+
+def _estimator():
+    import pickle
+
+    from settle.agent.estimator import Estimator, latest_model_path
+
+    payload = pickle.loads(Path(latest_model_path()).read_bytes())
+    return Estimator(payload["models"][payload["winner"]], payload["winner"])
+
+
+def _dispatch_log(cases, arm, path):
+    """Every dispatch each case produced, keyed by case, as comparable JSON."""
+    with Ledger(path) as ledger:
+        for generated in cases:
+            drive(generated, arm, ledger)
+    entries = read_entries(path)
+    out: dict[str, list] = {g.observed.case_id: [] for g in cases}
+    for entry in entries:
+        if entry.kind is LedgerKind.DISPATCH:
+            # Seq is a per-file counter and differs between arms that dispatched
+            # different totals, so it is deliberately not compared. What has to
+            # match is the action, its key, and when it fired.
+            out[entry.case_id].append(
+                (entry.at.isoformat(), json.dumps(entry.payload, sort_keys=True))
+            )
+    return out
+
+
+def _by_class(cases, name):
+    return [g for g in cases if classify(g.observed.decline_code).value == name]
+
+
+# OURS is the expensive arm and these three tests all need the same three logs,
+# so they are built once. A smaller batch than the module fixture: 250 cases
+# carries every decline class and the tests are comparisons, not measurements —
+# nothing here reads a rate.
+HYBRID_CASES = 250
+
+
+@pytest.fixture(scope="module")
+def composed(tmp_path_factory):
+    """OURS, B2 and HYBRID over one batch, under one seed. Built once."""
+    batch = generate_batch(HYBRID_CASES, SEED)
+    directory = tmp_path_factory.mktemp("hybrid")
+    estimator = _estimator()
+    return (
+        batch.cases,
+        _dispatch_log(batch.cases, OursArm(estimator), directory / "ours.jsonl"),
+        _dispatch_log(batch.cases, FixedLadderArm(), directory / "b2.jsonl"),
+        _dispatch_log(batch.cases, HybridArm(estimator), directory / "hybrid.jsonl"),
+    )
+
+
+def test_ARM_5_hybrid_routes_auth_abandoned_to_ours_and_the_rest_to_b2(composed):
+    """Compared against each source arm on the same cases, class by class.
+
+    A router asserted by inspection is a router asserted against itself. This
+    runs OURS and B2 over the whole batch, runs HYBRID over the same batch under
+    the same streams, and requires each class's dispatches to match exactly one
+    of them.
+    """
+    cases, ours, b2, hybrid = composed
+
+    seen: dict[str, set[str]] = {}
+    for generated in cases:
+        cid = generated.observed.case_id
+        cls = classify(generated.observed.decline_code).value
+        matches = set()
+        if hybrid[cid] == ours[cid]:
+            matches.add("OURS")
+        if hybrid[cid] == b2[cid]:
+            matches.add("B2")
+        assert matches, f"{cid} ({cls}): HYBRID matched neither source arm"
+        seen.setdefault(cls, set()).update(matches)
+
+    # auth_abandoned must be OURS and must be distinguishable from B2 — if the
+    # two agreed everywhere, the routing claim would be untestable.
+    assert "OURS" in seen["auth_abandoned"]
+    assert "B2" not in seen["auth_abandoned"] or len(seen["auth_abandoned"]) > 1
+
+    for cls, matched in seen.items():
+        if cls == "auth_abandoned":
+            continue
+        assert "B2" in matched, f"{cls} did not follow the ladder"
+
+
+def test_ARM_6_hybrid_in_observe_raises():
+    """INV-11 reaches HYBRID through what it contains: it holds OURS."""
+    estimator = _estimator()
+    with pytest.raises(ValueError, match="INV-11"):
+        HybridArm(estimator, ArmMode.OBSERVE)
+
+    # And it is constructible in the mode it is allowed to run in.
+    assert HybridArm(estimator, ArmMode.ENFORCE).mode is ArmMode.ENFORCE
+    assert HybridArm(estimator).mode is ArmMode.ENFORCE
+
+
+def test_ARM_7_hybrid_decisions_are_byte_identical_to_the_arm_that_owns_the_class(
+    composed,
+):
+    """What "composes two arms" has to mean.
+
+    Not "similar to", not "as good as" — the same bytes. A router that produced
+    a third behaviour on either class would make the per-class comparison
+    meaningless, because HYBRID's rows would no longer be OURS's and B2's rows
+    rearranged.
+    """
+    cases, ours, b2, hybrid = composed
+
+    auth = _by_class(cases, "auth_abandoned")
+    shiftable = _by_class(cases, "time_shiftable")
+    assert auth and shiftable, "the batch lacks a class this test needs"
+
+    for generated in auth:
+        cid = generated.observed.case_id
+        assert hybrid[cid] == ours[cid], f"{cid}: auth_abandoned did not match OURS"
+
+    for generated in shiftable:
+        cid = generated.observed.case_id
+        assert hybrid[cid] == b2[cid], f"{cid}: time_shiftable did not match B2"
+
+    # Not vacuous: the two sources must actually differ somewhere, or "identical
+    # to whichever owns the class" would be true of any router at all.
+    differ = [
+        g.observed.case_id for g in cases
+        if ours[g.observed.case_id] != b2[g.observed.case_id]
+    ]
+    assert differ, "OURS and B2 dispatched identically on every case"
+    assert any(
+        classify(g.observed.decline_code).value == "auth_abandoned"
+        for g in cases if g.observed.case_id in set(differ)
+    ), "OURS and B2 never differ on auth_abandoned, so the routing is unobservable"
+
+
+def test_ARM_7_hybrid_reimplements_neither_arm():
+    """It holds the two arms and delegates. No third policy, no new parameter.
+
+    Checked structurally as well as behaviourally: a `choose` that grew its own
+    logic would still pass the comparison tests on the day it was written and
+    drift the week after.
+    """
+    source = (Path(__file__).resolve().parent.parent
+              / "settle" / "runner" / "arms" / "hybrid.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    choose = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "choose"
+    )
+    # One statement: return the delegate's answer.
+    assert len(choose.body) == 1, "HYBRID.choose grew logic of its own"
+    assert isinstance(choose.body[0], ast.Return)
+
+    # It imports both arms and defines no policy constant beyond the class list.
+    assert "OursArm" in source and "FixedLadderArm" in source
+    for banned in ("expected_value", "predict", "hour_offsets", "POLICY_PARAMS"):
+        assert banned not in source, f"hybrid.py reaches for {banned}"

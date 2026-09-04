@@ -23,6 +23,8 @@
     "incremental_rate_pct": "0.00%",
     "incremental_rupees": "0",
     "mode": "ENFORCE",
+    "opt_outs_display": "0",
+    "opt_outs_induced": 0,
     "recovered": 2251,
     "reported_minus_reconciled_cases": -2251,
     "reported_minus_reconciled_display": "-2,251",
@@ -61,6 +63,8 @@
     "incremental_rate_pct": "13.86%",
     "incremental_rupees": "954,733",
     "mode": "ENFORCE",
+    "opt_outs_display": "44",
+    "opt_outs_induced": 44,
     "recovered": 3629,
     "reported_minus_reconciled_cases": -1527,
     "reported_minus_reconciled_display": "-1,527",
@@ -99,6 +103,8 @@
     "incremental_rate_pct": "26.65%",
     "incremental_rupees": "1,812,714",
     "mode": "ENFORCE",
+    "opt_outs_display": "411",
+    "opt_outs_induced": 411,
     "recovered": 4903,
     "reported_minus_reconciled_cases": -984,
     "reported_minus_reconciled_display": "-984",
@@ -137,6 +143,8 @@
     "incremental_rate_pct": "41.90%",
     "incremental_rupees": "2,784,579",
     "mode": "OBSERVE",
+    "opt_outs_display": "1,250",
+    "opt_outs_induced": 1250,
     "recovered": 6425,
     "reported_minus_reconciled_cases": -384,
     "reported_minus_reconciled_display": "-384",
@@ -152,6 +160,46 @@
      "SF-7": 65
     },
     "spend_paise": 11855850
+   },
+   "HYBRID": {
+    "actually_settled": 5474,
+    "arm": "HYBRID",
+    "believed_recovered": 4695,
+    "cases": 10000,
+    "censored_fraction": 0.0,
+    "compliance_violations": 0,
+    "compliance_violations_display": "0",
+    "contacts": 9192,
+    "contacts_display": "9,192",
+    "contacts_per_case": 0.9192,
+    "contacts_per_case_display": "0.9192",
+    "cost_per_100": 0.20840056315785932,
+    "cost_per_100_display": "\u20b90.2084",
+    "dispatches": 45304,
+    "dispatches_display": "45,304",
+    "incremental_cases": 3187,
+    "incremental_paise": 213713434,
+    "incremental_rate": 0.3187,
+    "incremental_rate_pct": "31.87%",
+    "incremental_rupees": "2,137,134",
+    "mode": "ENFORCE",
+    "opt_outs_display": "285",
+    "opt_outs_induced": 285,
+    "recovered": 5423,
+    "reported_minus_reconciled_cases": -779,
+    "reported_minus_reconciled_display": "-779",
+    "silent_failure_rate": 0.0487,
+    "silent_failure_rate_pct": "4.87%",
+    "silent_failures": {
+     "SF-1": 150,
+     "SF-2": 50,
+     "SF-3": 0,
+     "SF-4": 247,
+     "SF-5": 0,
+     "SF-6": 0,
+     "SF-7": 40
+    },
+    "spend_paise": 445380
    },
    "OURS": {
     "actually_settled": 5122,
@@ -175,6 +223,8 @@
     "incremental_rate_pct": "28.37%",
     "incremental_rupees": "1,909,817",
     "mode": "ENFORCE",
+    "opt_outs_display": "1",
+    "opt_outs_induced": 1,
     "recovered": 5074,
     "reported_minus_reconciled_cases": -976,
     "reported_minus_reconciled_display": "-976",
@@ -201,6 +251,13 @@
      "rate": 0.19886363636363635
     },
     "cases": 1232,
+    "hybrid": {
+     "cases": 245,
+     "paise": 16549021,
+     "rate": 0.19886363636363635
+    },
+    "hybrid_minus_b2_rate": 0.0,
+    "hybrid_source": "B2",
     "ours": {
      "cases": 209,
      "paise": 13134848,
@@ -216,6 +273,13 @@
      "rate": 0.0228310502283105
     },
     "cases": 1095,
+    "hybrid": {
+     "cases": 547,
+     "paise": 33846014,
+     "rate": 0.4995433789954338
+    },
+    "hybrid_minus_b2_rate": 0.4767123287671233,
+    "hybrid_source": "OURS",
     "ours": {
      "cases": 547,
      "paise": 33846014,
@@ -231,6 +295,13 @@
      "rate": 0.09221556886227544
     },
     "cases": 1670,
+    "hybrid": {
+     "cases": 154,
+     "paise": 10057651,
+     "rate": 0.09221556886227544
+    },
+    "hybrid_minus_b2_rate": 0.0,
+    "hybrid_source": "B2",
     "ours": {
      "cases": 0,
      "paise": 0,
@@ -246,6 +317,13 @@
      "rate": 0.0
     },
     "cases": 314,
+    "hybrid": {
+     "cases": 0,
+     "paise": 0,
+     "rate": 0.0
+    },
+    "hybrid_minus_b2_rate": 0.0,
+    "hybrid_source": "B2",
     "ours": {
      "cases": 0,
      "paise": 0,
@@ -261,6 +339,13 @@
      "rate": 0.40327280878726746
     },
     "cases": 4461,
+    "hybrid": {
+     "cases": 1799,
+     "paise": 124072332,
+     "rate": 0.40327280878726746
+    },
+    "hybrid_minus_b2_rate": 0.0,
+    "hybrid_source": "B2",
     "ours": {
      "cases": 1672,
      "paise": 116963088,
@@ -276,6 +361,13 @@
      "rate": 0.35993485342019543
     },
     "cases": 1228,
+    "hybrid": {
+     "cases": 442,
+     "paise": 29188416,
+     "rate": 0.35993485342019543
+    },
+    "hybrid_minus_b2_rate": 0.0,
+    "hybrid_source": "B2",
     "ours": {
      "cases": 409,
      "paise": 27037734,
@@ -420,6 +512,14 @@
      "sf2": 35,
      "sf2_share_of_blind_set": 0.06216696269982238
     },
+    "HYBRID": {
+     "blind_set": 929,
+     "contacts": 9192,
+     "dispatches": 45304,
+     "settled": 5474,
+     "sf2": 50,
+     "sf2_share_of_blind_set": 0.05382131324004306
+    },
     "OURS": {
      "blind_set": 1114,
      "contacts": 36,
@@ -439,6 +539,13 @@
     "settled_display": "5,122",
     "sf2_display": "1",
     "share_pct": "0.1%"
+   },
+   {
+    "arm": "HYBRID",
+    "blind_set_display": "929",
+    "settled_display": "5,474",
+    "sf2_display": "50",
+    "share_pct": "5.4%"
    },
    {
     "arm": "B2",
@@ -489,6 +596,18 @@
      "0",
      "0",
      "36"
+    ]
+   },
+   {
+    "arm": "HYBRID",
+    "counts": [
+     "150",
+     "50",
+     "0",
+     "247",
+     "0",
+     "0",
+     "40"
     ]
    },
    {
@@ -576,7 +695,7 @@
  "meta": {
   "cases": 10000,
   "cases_display": "10,000",
-  "generated_at": "2026-09-02T18:15:53.713247+00:00",
+  "generated_at": "2026-09-04T11:37:19.249575+00:00",
   "note": "Every value here is finished by settle/eval/report.py. The viewer renders; it does not compute (VIW-2).",
   "seed": 42
  },

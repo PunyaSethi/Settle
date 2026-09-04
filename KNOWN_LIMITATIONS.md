@@ -260,6 +260,30 @@ the robust part of the result, not the recovery gap. Second, we do not know
 where it settles: 10,000 is the largest batch we run, so we can say the margin
 shrank between our two sizes but not that it has converged.
 
+### HYBRID measures a ceiling, not a policy we could ship
+
+CP17 routed `auth_abandoned` to OURS and everything else to B2's ladder. It
+recovers 31.87% against our 28.37%. Three things bound what that number means.
+
+**The router was fitted on the result it is evaluated against.** `auth_abandoned`
+is in the routing table because the per-class breakdown said OURS wins it, and
+that breakdown came from this same 10,000-case run at this same seed. There is no
+held-out set here. The honest reading is "the best class-based routing achievable
+with hindsight on this batch", which is an upper bound, not an estimate of what
+routing would earn on data we had not seen.
+
+**It is a lookup, not a rule.** One class, chosen by eye. A threshold — route to
+OURS wherever it beat B2 by more than k points — would have a k in it, and k
+would have been picked against the same numbers. The lookup at least makes the
+arbitrariness visible instead of dressing it as a criterion.
+
+**What it costs.** 3.50 points of recovery for 255x the contacts, 285x the
+opt-outs, and 2.34x the cost per rupee. The restraint result does not survive
+routing: HYBRID contacts 66% as much as the fixed ladder, and 50 customers who
+had already paid were contacted again against our 1. We report it because a
+reader would otherwise wonder whether we tried, not because it is a better
+answer to the problem we set.
+
 ### Seven of fourteen swept parameters leave OURS completely unmoved
 
 Not because the policy is robust. Because it makes 36 contacts in 10,000 cases,
