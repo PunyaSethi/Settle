@@ -1,0 +1,196 @@
+{
+ "about": "The four voice clips, transcribed once and replayed from cache. Every field here was produced by settle/api/voice.py:trace() — the same function POST /voice/extract runs — so the committed demo and the live endpoint cannot drift.",
+ "anchor": "2026-01-10",
+ "anchor_note": "A declared constant, not today. Relative dates resolve against the case's created_at; a clock would make the replay irreproducible.",
+ "clips": [
+  {
+   "action": "log_promise",
+   "anchor": "2026-01-10",
+   "audio": {
+    "bytes": 14661,
+    "filename": "clip1.ogg",
+    "sha256": "c478a226a3cdc3e8b7e94247aed6f2f4d5326cbdc03cc12863a86bd2c438eb2b"
+   },
+   "chosen_span": {
+    "kind": "day_of_month",
+    "start": 77,
+    "text": "pandrah tareekh"
+   },
+   "clip": 1,
+   "effect": "promise_date set; G6 suppresses contact until that date",
+   "n_spans": 2,
+   "sets_nothing": false,
+   "spans_evaluated": [
+    {
+     "accepted": false,
+     "kind": "next_month",
+     "parsed_date": null,
+     "rejected_because": "a month with no day is not a commitment",
+     "start": 43,
+     "text": "agle mahine",
+     "validated_date": null
+    },
+    {
+     "accepted": true,
+     "kind": "day_of_month",
+     "parsed_date": "2026-01-15",
+     "rejected_because": null,
+     "start": 77,
+     "text": "pandrah tareekh",
+     "validated_date": "2026-01-15"
+    }
+   ],
+   "spans_located": [
+    {
+     "kind": "next_month",
+     "start": 43,
+     "text": "agle mahine"
+    },
+    {
+     "kind": "day_of_month",
+     "start": 77,
+     "text": "pandrah tareekh"
+    }
+   ],
+   "tests": "absolute date with self-correction — the LAST span wins",
+   "transcript": "haan dekho abhi thoda tight chal raha hai, agle mahine kar dunga. Chalo nahi pandrah tareekh tak ho jayega.",
+   "transcription": {
+    "audio_sha256": "c478a226a3cdc3e8b7e94247aed6f2f4d5326cbdc03cc12863a86bd2c438eb2b",
+    "cached": true,
+    "model": "gpt-4o-transcribe",
+    "script": "latin",
+    "source": "CACHE",
+    "text": "haan dekho abhi thoda tight chal raha hai, agle mahine kar dunga. Chalo nahi pandrah tareekh tak ho jayega."
+   },
+   "verdict": {
+    "confidence": "high",
+    "kind": "promise",
+    "matched_span": "pandrah tareekh",
+    "promise_date": "2026-01-15"
+   }
+  },
+  {
+   "action": "log_promise",
+   "anchor": "2026-01-10",
+   "audio": {
+    "bytes": 7171,
+    "filename": "clip2.ogg",
+    "sha256": "c253d95b7b6d1ffc54cd56dadf5fabbbb308864e11758e004cdc2604b2fa5a2b"
+   },
+   "chosen_span": {
+    "kind": "in_weeks",
+    "start": 0,
+    "text": "Ek hafte"
+   },
+   "clip": 2,
+   "effect": "promise_date set; G6 suppresses contact until that date",
+   "n_spans": 1,
+   "sets_nothing": false,
+   "spans_evaluated": [
+    {
+     "accepted": true,
+     "kind": "in_weeks",
+     "parsed_date": "2026-01-17",
+     "rejected_because": null,
+     "start": 0,
+     "text": "Ek hafte",
+     "validated_date": "2026-01-17"
+    }
+   ],
+   "spans_located": [
+    {
+     "kind": "in_weeks",
+     "start": 0,
+     "text": "Ek hafte"
+    }
+   ],
+   "tests": "relative date — anchored to created_at, never the clock",
+   "transcript": "Ek hafte mein bhej dunga, paise bhi nahi hain mere paas.",
+   "transcription": {
+    "audio_sha256": "c253d95b7b6d1ffc54cd56dadf5fabbbb308864e11758e004cdc2604b2fa5a2b",
+    "cached": true,
+    "model": "gpt-4o-transcribe",
+    "script": "latin",
+    "source": "CACHE",
+    "text": "Ek hafte mein bhej dunga, paise bhi nahi hain mere paas."
+   },
+   "verdict": {
+    "confidence": "high",
+    "kind": "promise",
+    "matched_span": "Ek hafte",
+    "promise_date": "2026-01-17"
+   }
+  },
+  {
+   "action": "none",
+   "anchor": "2026-01-10",
+   "audio": {
+    "bytes": 8278,
+    "filename": "clip3.ogg",
+    "sha256": "7b7b7805632faa1170363d99a038a98d07a02ad2ad719b4e8ffbec0cb258c992"
+   },
+   "chosen_span": null,
+   "clip": 3,
+   "effect": "nothing is set. No promise_date, no suppression window, no stop. The case proceeds exactly as if the customer had not replied.",
+   "n_spans": 0,
+   "sets_nothing": true,
+   "spans_evaluated": [],
+   "spans_located": [],
+   "tests": "NOT a promise — a hedge sets nothing, and that is the point",
+   "transcript": "haan theek hai, dekhta hoon, baad mein baat karte hain.",
+   "transcription": {
+    "audio_sha256": "7b7b7805632faa1170363d99a038a98d07a02ad2ad719b4e8ffbec0cb258c992",
+    "cached": true,
+    "model": "gpt-4o-transcribe",
+    "script": "latin",
+    "source": "CACHE",
+    "text": "haan theek hai, dekhta hoon, baad mein baat karte hain."
+   },
+   "verdict": {
+    "confidence": "high",
+    "kind": "hedged",
+    "matched_span": "theek hai",
+    "promise_date": null
+   }
+  },
+  {
+   "action": "set_opted_out",
+   "anchor": "2026-01-10",
+   "audio": {
+    "bytes": 8837,
+    "filename": "clip4.ogg",
+    "sha256": "64f53c6c891d88bbf97562f543c41e8df016a25f086f3ff370f4d5d9c686b9a9"
+   },
+   "chosen_span": null,
+   "clip": 4,
+   "effect": "opted_out set; S4 stops the case, G7 blocks every channel",
+   "n_spans": 0,
+   "sets_nothing": false,
+   "spans_evaluated": [],
+   "spans_located": [],
+   "tests": "opt-out — sets opted_out, S4 fires",
+   "transcript": "Mujhe baar baar call mat karo bhai, main khud dekh lunga.",
+   "transcription": {
+    "audio_sha256": "64f53c6c891d88bbf97562f543c41e8df016a25f086f3ff370f4d5d9c686b9a9",
+    "cached": true,
+    "model": "gpt-4o-transcribe",
+    "script": "latin",
+    "source": "CACHE",
+    "text": "Mujhe baar baar call mat karo bhai, main khud dekh lunga."
+   },
+   "verdict": {
+    "confidence": "high",
+    "kind": "opt_out",
+    "matched_span": "mat karo",
+    "promise_date": null
+   }
+  }
+ ],
+ "generated_at": "2026-09-04T03:07:22.140712+00:00",
+ "transcription": {
+  "finding": "With language='hi' and no prompt, gpt-4o-transcribe returned Urdu in Arabic script for all four clips, and truncated clip 1 before its self-correction. A romanised-Hinglish prompt fixes the script and recovers the clause. At the default temperature the same audio gave three different strings in four calls, one of them truncated; at 0 it is stable. Both are recorded in settle/text/voice.py.",
+  "language_param": "hi",
+  "model": "gpt-4o-transcribe",
+  "temperature": 0.0
+ }
+}

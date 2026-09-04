@@ -302,4 +302,61 @@ and runs the real script under Node with `location.protocol = "file:"` and
 `fetch` throwing. A page that depended on a fetch to render screens 1 or 2 fails
 there rather than in front of a judge.
 
-Next is CP15: the voice endpoint, then the video.
+## CP15 — voice, and what gpt-4o-transcribe actually returned
+
+`settle/text/voice.py`, `settle/text/promise.py`, `settle/api/voice.py`, screen 3,
+and VOI-1..8. All four clips transcribe, extract and replay from cache.
+
+### Three transcription findings, and they were not small
+
+DECISIONS warned that gpt-transcribe returns Devanagari for Hindi regardless of
+the `language` parameter. Measured, it is worse in three ways.
+
+**It returned Urdu.** With `language="hi"` and no prompt, all four clips came
+back in Arabic script — a third script no parser was written for. Every clip
+would have classified as unclear.
+
+**It truncated.** Clip 1's un-prompted transcript stops at "agle mahine kar
+dunga" and drops the self-correction, which is the only reason that clip exists.
+The audio contains it; the transcription discarded it.
+
+**It was not deterministic.** At the default temperature the same file
+transcribed four times gave three different strings, one of them truncated.
+
+A romanised-Hinglish `prompt` fixes the script and recovers the clause;
+`temperature=0` makes it 4/4 identical. Both are correctness settings, not
+preferences, and `PROMPT_VERSION` is in the cache key so a steering change
+invalidates the transcripts it produced rather than serving them under a
+configuration that no longer exists.
+
+### promise.py adds no judgement
+
+It is a trace layer over `classify.py`, which already implements the CP7.0
+contract — locate, parse, validate, decide. Re-implementing any of it would give
+the batch path and the voice path two different notions of what a promise is,
+and the first divergence would be invisible until a demo.
+
+It adds one span kind: `next_month`, always rejected, because a month with no day
+is not a commitment. Located anyway so clip 1's "agle mahine" can be shown being
+considered and set aside rather than never looked at. Without it, VOI-3 would
+pass vacuously on a transcript with only one span.
+
+### The four verdicts
+
+    clip 1  promise   2026-01-15   agle mahine rejected, pandrah tareekh accepted
+    clip 2  promise   2026-01-17   ek hafte mein, anchored to created_at
+    clip 3  hedged    none         sets nothing — no date, no suppression
+    clip 4  opt_out   none         opted_out set, S4 fires
+
+Clip 3 is the demo. Anyone can extract a date from clip 1; refusing to log a
+polite brush-off as a promise, and therefore not suppressing contact for weeks on
+a customer who was being courteous, is the judgement no competing submission
+shows.
+
+### Carry-forward
+
+F31: A127 and A128 applied, pending since CP13.3. F32: `GET /` serves the viewer
+and the CP12 assertion that it returns 501 is updated — both files were open,
+which is why it waited.
+
+Next is the video.

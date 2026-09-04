@@ -483,8 +483,8 @@ def test_WBH_6_an_unsubscribed_event_is_recorded_and_flagged(edge: Path) -> None
 # --------------------------------------------------------------------------
 
 def test_WBH_1_the_app_declares_exactly_the_three_spec_routes(edge: Path) -> None:
-    """Two are stubs. 501 rather than 404: the route exists and does not work
-    yet, which is a different claim from the route not existing."""
+    """All three do their job as of CP15. The table is the contract; what each
+    route returns is checked underneath."""
     # Read from the OpenAPI schema rather than `app.routes`: FastAPI keeps an
     # included router as one nested object, so walking `app.routes` would report
     # the two decorated stubs and silently miss the route that matters.
@@ -499,5 +499,9 @@ def test_WBH_1_the_app_declares_exactly_the_three_spec_routes(edge: Path) -> Non
         ("/", "GET"),
     }, "SPEC §16 fixes the route table at exactly three"
 
-    assert call("POST", "/voice/extract").status == 501
-    assert call("GET", "/").status == 501
+    # Both were 501 stubs until CP15. `/voice/extract` extracts now and `GET /`
+    # serves viewer/index.html (A129, A133); the table is still the three §16
+    # fixes, which is what this test is actually about.
+    assert call("GET", "/").status == 200
+    # No body: the route rejects rather than transcribing nothing.
+    assert call("POST", "/voice/extract").status == 400

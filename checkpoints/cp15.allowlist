@@ -1,0 +1,81 @@
+# CP15 — voice, the viewer route, and carry-forward.
+#
+# The four clips transcribe, extract, and replay from cache with no credentials.
+# `promise.py` is a trace layer over `classify.py` rather than a second
+# implementation: the CP7.0 contract is unchanged, and re-implementing any of it
+# would give the batch path and the voice path two different notions of what a
+# promise is.
+#
+# F31: A127 and A128 applied, pending since CP13.3.
+# F32: GET / serves the viewer; the CP12 assertion that it returns 501 updated.
+
+settle/text/voice.py
+settle/text/promise.py
+settle/api/app.py
+settle/api/voice.py
+viewer/index.html
+tests/test_webhook.py
+tests/test_voice.py
+fixtures/voice/
+out/voice_demo.json
+SPEC.md
+PLAN.md
+checkpoints/cp15.allowlist
+
+# --- What the transcription actually did ------------------------------------
+#
+# Three findings, all measured on these four clips, all recorded in
+# settle/text/voice.py and SPEC A134 rather than quietly fixed.
+#
+# 1. It returned URDU. `language="hi"`, no prompt, and all four clips came back
+#    in Arabic script. DECISIONS warned about Devanagari; the reality was a
+#    third script no parser was written for, and every clip would have
+#    classified as unclear.
+#
+# 2. It TRUNCATED. Clip 1's un-prompted transcript stops at "agle mahine kar
+#    dunga" and drops the self-correction that is the clip's only purpose. The
+#    audio contains it. Confirmed by re-transcribing the same file with a prompt
+#    and getting the clause back.
+#
+# 3. It was NOT DETERMINISTIC. Four calls on clip 1 at the default temperature
+#    gave three different strings, one truncated. At temperature 0, 4/4
+#    identical.
+#
+# A romanised-Hinglish `prompt` fixes 1 and 2; `temperature=0` fixes 3. Both are
+# correctness settings. PROMPT_VERSION is part of the cache key so a steering
+# change invalidates the transcripts it produced.
+#
+# The clips themselves are fine. Nothing here is a recording problem.
+
+# --- out/llm_cache.json is NOT committed, and does not need to be -------------
+#
+# It is a run artefact, gitignored, and not on this allowlist. The first attempt
+# at this checkpoint force-added it, which the gate correctly refused.
+#
+# The prompt says to commit "the clips, the transcripts, and out/voice_demo.json"
+# — and the transcripts are already in out/voice_demo.json, which is allowlisted
+# and carries every clip's transcript beside the sha256 of the audio that
+# produced it. So `transcribe()` reads three sources in order: the run cache,
+# then that committed artefact, then the model.
+#
+# The result is better than force-adding the cache would have been. A fresh
+# clone has no cache and no key and still replays every clip, and
+# `test_VOI_1_a_fresh_clone_replays_with_no_cache_and_no_key` asserts exactly
+# that state rather than assuming it — it points CACHE_PATH at an empty file,
+# deletes OPENAI_API_KEY, and requires every clip to resolve with source=DEMO.
+#
+# The artefact is keyed on the same content hash as the cache, so the two cannot
+# disagree about which audio a transcript belongs to.
+
+# --- python-multipart, and why the route takes a raw body --------------------
+#
+# FastAPI's `UploadFile` needs `python-multipart`, which is not pinned, and
+# `requirements.txt` is not on this allowlist. Installing it into .venv without
+# declaring it would make the endpoint work here and fail for anyone cloning the
+# repo — the trade CP12 refused over `httpx`, for the same reason.
+#
+# So `POST /voice/extract` reads the audio from the request body and takes the
+# filename from a header. The webhook already reads raw bytes for its own
+# reasons, so the shape is not new. If a future checkpoint opens
+# requirements.txt, `python-multipart` plus `UploadFile` is the tidier form and
+# nothing else about the route changes.

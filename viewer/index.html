@@ -520,18 +520,18 @@ function renderVoice() {
   root.append(
     el("h2", { text: "Voice lab" }),
     el("p", { class: "lede", text:
-      "Drop a WhatsApp voice note. The transcript, the span the reader located, the " +
-      "parsed date, its validation, the verdict and the resulting action — the whole " +
-      "chain, including the cases where it declines to log a promise." }));
+      "Drop a WhatsApp voice note. The transcript, every span the locator found, " +
+      "what each parsed to, which validation rejected and why, the verdict, and " +
+      "the resulting action — including the clips where the answer is that nothing " +
+      "happens." }));
 
   if (!served) {
     root.append(el("div", { class: "callout warn" },
       el("p", { html: "<b>This screen needs the API.</b> Screens 1 and 2 work from " +
-        "the filesystem; extraction posts an audio file to " +
-        "<code>POST /voice/extract</code>, which needs a server." }),
-      el("p", { html: "<code>GET /</code> does not serve this page yet — it lands at CP15 " +
-        "with the endpoint. Screens 1 and 2 are complete from the filesystem; this one " +
-        "is a working uploader waiting on its route." })));
+        "the filesystem; extraction posts audio to <code>POST /voice/extract</code>, " +
+        "which a <code>file://</code> page cannot reach." }),
+      el("p", { html: "Start it with <code>uvicorn settle.api.app:app --port 8002</code> " +
+        "and open <code>http://127.0.0.1:8002/</code>." })));
     return;
   }
 
@@ -541,24 +541,28 @@ function renderVoice() {
   const drop = el("div", { class: "drop" },
     el("p", { text: "Drop an .ogg voice note here, or choose a file." }), input);
 
+  // The file is the body. POST /voice/extract takes raw bytes rather than a
+  // multipart form, because python-multipart is not a pinned dependency and an
+  // undeclared one would work here and fail for anyone cloning the repo.
   const send = async file => {
     out.replaceChildren(el("p", { class: "muted", text: "Extracting " + file.name + "…" }));
-    const body = new FormData();
-    body.append("audio", file, file.name);
     let response, payload;
     try {
-      response = await fetch("/voice/extract", { method: "POST", body });
+      response = await fetch("/voice/extract", {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream", "x-filename": file.name },
+        body: file,
+      });
       payload = await response.json();
     } catch (err) {
       out.replaceChildren(el("div", { class: "callout warn" },
         el("p", { text: "The request failed: " + err.message })));
       return;
     }
-    if (response.status === 501) {
+    if (!response.ok) {
       out.replaceChildren(el("div", { class: "callout warn" },
-        el("p", { html: "<b>Not implemented yet.</b> " + (payload.detail || "") }),
-        el("p", { text: "The route is declared in SPEC §16 and lands at CP15. " +
-          "It returns 501 rather than 404 because it exists and does not work yet." })));
+        el("p", { html: "<b>" + (payload.reason_code || response.status) + "</b>" }),
+        el("p", { text: payload.detail || "" })));
       return;
     }
     out.replaceChildren(renderExtraction(payload));
@@ -576,21 +580,52 @@ function renderVoice() {
 
 function renderExtraction(p) {
   const frag = el("div", {});
-  const stage = (title, value) => {
-    frag.append(el("h3", { text: title }));
-    frag.append(typeof value === "string"
-      ? el("p", { text: value })
-      : el("pre", { text: JSON.stringify(value, null, 2) }));
-  };
-  if (p.transcript !== undefined) stage("Transcript", p.transcript);
-  if (p.span !== undefined) stage("Span located", p.span);
-  if (p.parsed_date !== undefined) stage("Parsed date", p.parsed_date);
-  if (p.validation !== undefined) stage("Validation", p.validation);
-  if (p.verdict !== undefined) stage("Verdict", p.verdict);
-  if (p.action !== undefined) stage("Resulting action", p.action);
-  if (!Object.keys(p).some(k =>
-      ["transcript", "span", "parsed_date", "validation", "verdict", "action"].includes(k)))
-    frag.append(el("pre", { text: JSON.stringify(p, null, 2) }));
+  const t = p.transcription || {};
+  const v = p.verdict || {};
+
+  frag.append(el("h3", { text: "Transcript" }));
+  frag.append(el("p", {}, el("b", { text: p.transcript || "" })));
+  frag.append(el("p", { class: "muted" },
+    el("span", { class: "tag", text: t.model || "" }), " ",
+    el("span", { class: "tag", text: "script: " + (t.script || "?") }), " ",
+    el("span", { class: "tag", text: t.cached ? "from cache" : "fresh STT call" }), " ",
+    el("span", { class: "tag", text: "anchor " + p.anchor })));
+
+  frag.append(el("h3", { text: `Spans located (${p.n_spans})` }));
+  if (!p.spans_evaluated.length) {
+    frag.append(el("p", { class: "muted", text:
+      "No date span in this transcript. Nothing to parse, so nothing is set." }));
+  } else {
+    frag.append(table(
+      ["Span", "Kind", "Parsed", "Validated", "Verdict"],
+      p.spans_evaluated.map(s => ({
+        rowClass: s.accepted ? "chosen" : "blocked",
+        cells: [
+          { text: s.text, class: "" },
+          { text: s.kind, class: "" },
+          { text: s.parsed_date || "—", class: "num" },
+          { text: s.validated_date || "—", class: "num" },
+          { text: s.accepted ? "accepted" : s.rejected_because, class: "" },
+        ],
+      }))));
+    if (p.n_spans > 1) {
+      frag.append(el("p", { class: "muted", text:
+        "Source order decides. The last span that validates wins, which is how a " +
+        "self-correction resolves to what the customer said second." }));
+    }
+  }
+
+  frag.append(el("h3", { text: "Verdict" }));
+  frag.append(el("p", {},
+    el("span", { class: v.kind === "hedged" ? "tag block" : "tag ok", text: v.kind }), " ",
+    el("span", { class: "tag", text: "confidence " + v.confidence }), " ",
+    v.matched_span ? el("span", { class: "tag", text: "on: " + v.matched_span }) : null,
+    v.promise_date ? el("span", { class: "tag ok", text: "promise " + v.promise_date }) : null));
+
+  frag.append(el("h3", { text: "Resulting action" }));
+  frag.append(el("div", { class: p.sets_nothing ? "callout warn" : "callout" },
+    el("p", {}, el("b", { text: p.action })),
+    el("p", { text: p.effect })));
   return frag;
 }
 
