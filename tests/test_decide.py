@@ -14,14 +14,18 @@ preset that stopped demonstrating its mechanism would still look fine on screen,
 which is exactly why it needs a test.
 """
 
+import asyncio
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from settle.agent.estimator import load_latest
 from settle.agent.policy import choose
+from settle.api.app import app
 from settle.api.decide import DecideRequest, decide
 from settle.policy.legal import legal_actions
 from settle.schema.enums import ActionType, ArmMode
@@ -32,9 +36,96 @@ VIEWER = REPO_ROOT / "viewer" / "index.html"
 ESTIMATOR = load_latest()
 needs_model = pytest.mark.skipif(ESTIMATOR is None, reason="no model in out/")
 
+NODE = shutil.which("node")
+needs_node = pytest.mark.skipif(NODE is None, reason="node not available")
+
 
 def call(**overrides) -> dict:
     return decide(DecideRequest(**overrides), ESTIMATOR)
+
+
+def post(payload: dict) -> tuple[int, dict]:
+    """One real POST to `/policy/decide`, through the app.
+
+    `call` above goes straight to `decide()`, which is right for DEC-1: it is
+    comparing against `choose()` and the transport is not the subject. The
+    preset test needs the other thing — the route resolving, the body parsing
+    and the validation the browser meets — because a preset that no longer
+    validates would fail on screen while every in-process test stayed green.
+    """
+    sent: list[dict] = []
+    body = json.dumps(payload).encode()
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/policy/decide",
+        "raw_path": b"/policy/decide",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+        ],
+        "client": ("127.0.0.1", 51234),
+        "server": ("testserver", 80),
+    }
+
+    async def receive() -> dict:
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    asyncio.run(app(scope, receive, send))
+    status = next(m["status"] for m in sent if m["type"] == "http.response.start")
+    raw = b"".join(m.get("body", b"") for m in sent if m["type"] == "http.response.body")
+    return status, json.loads(raw)
+
+
+# The preset handler sets every field to `preset.values[k] ?? DEFAULTS[k] ?? ""`
+# and `body()` then drops the empties, reads "true"/"false" as booleans and
+# number inputs as numbers. Both rules are reproduced here, over the page's own
+# four constants — evaluated rather than pattern-matched, so a renamed field or
+# a preset naming a field that does not exist shows up as a payload the endpoint
+# refuses rather than as a substring that happens to still be present.
+_PRESET_JS = """
+const kind = {};
+for (const [k, , k3] of DECIDE_FIELDS.concat(DECIDE_ADVANCED)) kind[k] = k3;
+console.log(JSON.stringify(DECIDE_PRESETS.map(p => {
+  const payload = {};
+  for (const k of Object.keys(kind)) {
+    const raw = String(p.values[k] ?? DECIDE_DEFAULTS[k] ?? "");
+    if (raw === "") continue;
+    if (raw === "true" || raw === "false") payload[k] = raw === "true";
+    else if (kind[k] === "number") payload[k] = Number(raw);
+    else payload[k] = raw;
+  }
+  return { name: p.name, why: p.why, values: p.values, payload };
+})));
+"""
+
+
+def preset_payloads() -> list[dict]:
+    """What the page posts when each preset button is pressed."""
+    html = VIEWER.read_text(encoding="utf-8")
+    block = html[html.index("const DECIDE_FIELDS"): html.index("function renderDecide")]
+    proc = subprocess.run(
+        [NODE, "-e", block + _PRESET_JS], capture_output=True, text=True, timeout=60
+    )
+    assert proc.returncode == 0, proc.stderr
+    presets = json.loads(proc.stdout)
+
+    # Every key a preset names must be a field the form actually renders,
+    # otherwise the preset sets nothing and the button is decoration.
+    for preset in presets:
+        for key in preset["values"]:
+            assert key in preset["payload"], (
+                f"{preset['name']} sets {key}, which the form does not render"
+            )
+    return presets
 
 
 # --------------------------------------------------------------------------
@@ -234,22 +325,71 @@ def test_DEC_3_a_live_promise_suppresses_contact_but_not_the_retry() -> None:
     )
 
 
-def test_DEC_3_the_presets_in_the_page_match_the_cases_under_test() -> None:
-    """The screen's presets are the ones asserted above.
+@needs_node
+@needs_model
+def test_DEC_3_each_preset_demonstrates_its_mechanism_through_the_endpoint() -> None:
+    """The presets, as the page would send them, priced by the real route.
 
-    Parsed from the page rather than trusted: a preset edited to something that
-    no longer shows its mechanism would leave these tests passing against cases
-    nobody can reach from the UI.
+    The three tests above build their cases by hand. That proves the mechanism
+    and proves nothing about the demo: the payload the UI actually posts is the
+    form's defaults with the preset's values laid over them, and until CP18.2
+    nothing connected the two. The old version of this test string-matched the
+    `DECIDE_PRESETS` block — `"do_not_honour"` appears twice, `tick: 16` is
+    present — which passes just as happily if the presets are shuffled, so the
+    02:00 case could lose its tick to the promise case and every test here would
+    stay green while the button on screen demonstrated nothing.
+
+    So: take the presets from the page, build each payload the way the preset
+    handler and `body()` build it, POST it to `/policy/decide`, and assert the
+    behaviour the preset's own `why` claims. A151 is what this is guarding —
+    the presets were wrong once already, silently, and looked right.
     """
-    html = VIEWER.read_text(encoding="utf-8")
-    block = html[html.index("const DECIDE_PRESETS"): html.index("function renderDecide")]
+    presets = preset_payloads()
+    assert [p["name"] for p in presets] == [
+        "Expired card", "Bank said no, 02:00", "Already promised",
+    ], "the presets on screen are not the ones asserted here"
 
-    assert '"mandate_revoked"' in block and '"revoked"' in block
-    assert block.count('"do_not_honour"') >= 2
-    assert "tick: 16" in block
-    assert '"2026-01-25"' in block
-    # Each carries a stated reason; a preset with no explanation is a bookmark.
-    assert block.count("why:") == 3
+    for preset in presets:
+        name, payload = preset["name"], preset["payload"]
+        # A preset with no stated reason is a bookmark, not a demonstration.
+        assert preset["why"], f"{name} carries no explanation"
+
+        status, result = post(payload)
+        assert status == 200, f"{name} was refused by its own endpoint: {result}"
+
+        by_type: dict[str, list[dict]] = {}
+        for alt in result["alternatives"]:
+            by_type.setdefault(alt["action_type"], []).append(alt)
+        excluded = {v["action_type"] for v in result["diagnosis"]["excluded_verbs"]}
+        retry, message = ActionType.RETRY.value, ActionType.SEND_MESSAGE.value
+
+        if name == "Expired card":
+            assert result["diagnosis"]["decline_class"] == "dead_instrument"
+            assert retry not in by_type, "a retry was priced for a dead instrument"
+            assert retry in excluded, "retry is missing but not reported as excluded"
+        else:
+            # Both contact presets need a contact verb to act on, and a legal
+            # retry beside it. That pairing is the whole demonstration: the gate
+            # stopped the message and left the silent attempt running. It is
+            # also exactly what `time_shiftable` could not provide (A151).
+            gate = "G1" if name == "Bank said no, 02:00" else "G6"
+            assert message in by_type, f"{name}: no contact candidate to block"
+            for alt in by_type[message]:
+                assert alt["legal"] is False, f"{name}: {gate} blocked nothing"
+                assert alt["block_gate"] == gate, (
+                    f"{name}: blocked by {alt['block_gate']}, not {gate}"
+                )
+            assert retry in by_type and any(a["legal"] for a in by_type[retry]), (
+                f"{name}: {gate} took the silent retry with it"
+            )
+
+        if name == "Bank said no, 02:00":
+            assert result["state"]["ist_hour"] == 2, "the 02:00 preset is not at 02:00"
+        if name == "Already promised":
+            assert result["state"]["promise_date"] == "2026-01-25"
+            assert result["state"]["ist_hour"] != 2, (
+                "the promise preset lands in quiet hours, so G1 could be doing G6's work"
+            )
 
 
 # --------------------------------------------------------------------------

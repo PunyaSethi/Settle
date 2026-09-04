@@ -1,0 +1,60 @@
+# CP18.2 — one test. The presets are now tested through the endpoint.
+
+tests/test_decide.py
+checkpoints/cp18_2.allowlist
+
+# --- F44 ----------------------------------------------------------------------
+#
+# The old test read the page as text:
+#
+#     assert '"mandate_revoked"' in block and '"revoked"' in block
+#     assert block.count('"do_not_honour"') >= 2
+#     assert "tick: 16" in block
+#     assert '"2026-01-25"' in block
+#
+# Every one of those is true of a shuffled preset list. Nothing tied tick 16 to
+# the 02:00 case or the promise date to the promise case, so the two contact
+# presets could swap their distinguishing values and the suite would stay green
+# while both buttons demonstrated the wrong gate. The three behaviour tests
+# above it are hand-built and never see a preset at all.
+#
+# It now builds each preset's real payload and posts it.
+#
+#   values <- preset.values[k] ?? DECIDE_DEFAULTS[k] ?? ""     (preset handler)
+#   payload <- drop empties, "true"/"false" -> bool, number inputs -> Number
+#                                                              (body())
+#
+# The four constants are evaluated in node rather than pattern-matched, so a
+# renamed field or a preset naming a field the form does not render fails
+# instead of quietly setting nothing. Then POST /policy/decide through the ASGI
+# app — the route, the body parse and the validation the browser meets, not the
+# in-process `decide()` the other tests call — and assert what each preset's own
+# `why` claims:
+#
+#   Expired card          retry ABSENT from the priced options and reported as
+#                         excluded by the class. Not blocked; never a candidate.
+#   Bank said no, 02:00   every send_message blocked, block_gate == G1, at least
+#                         one retry still legal, and ist_hour == 2.
+#   Already promised      every send_message blocked, block_gate == G6, a retry
+#                         still legal, and NOT in quiet hours — otherwise G1
+#                         could be doing G6's work and the preset would pass
+#                         while demonstrating the other gate.
+#
+# Checked by mutation, on a scratch copy of the page, all three restored after:
+#
+#   tick 16 moved to the promise preset  -> "Bank said no, 02:00: G1 blocked nothing"
+#   02:00 preset back on time_shiftable  -> "no contact candidate to block"   (A151)
+#   the two contact presets swapped      -> "the presets on screen are not the
+#                                            ones asserted here"
+#
+# The second is the one worth having. It is A151 exactly — the failure that
+# shipped once, silently, on the demo surface — and it now fails a test.
+
+# --- What this still does not cover -------------------------------------------
+#
+# The payload is assembled by rules mirrored from the page, not by the page. A
+# DOM shim rendering screen 4 and clicking the button would be the honest
+# version; test_viewer.py's shim does not know the `decide` mount, which is why
+# renderDecide carries its null guard. So a change to `body()`'s coercion — a
+# new field kind, empties sent rather than dropped — would not be caught here.
+# The mirror is nine lines and sits beside the rules it copies.
