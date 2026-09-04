@@ -452,3 +452,26 @@ unconstrained figure is 31.87%.
 
 The viewer's batch table carries HYBRID marked COMPOSED, and gained an
 opt-outs-induced row — the number that makes the tradeoff legible at a glance.
+
+## CP17.2 — the chart that would not update
+
+CP17.1 put HYBRID on chart 1. The browser kept showing the old chart through
+repeated reloads while the page around it updated correctly — the HYBRID column
+and the opt-outs row appeared, the image did not. Same page, two different ages.
+
+The access log settled it in one line: `GET /` 200, `/out/viewer_data.json` 404,
+and no chart request at all, ever. The browser had never asked this server for a
+PNG. It was serving them from its own memory, from before the regeneration.
+
+Chart URLs now carry `?v=<Date.now()>`, because the URL is the only thing the
+page controls that a cache cannot ignore. The viewer and the chart mount send
+`Cache-Control: no-cache` — revalidate, not do-not-store — which closes the same
+hole for the page itself. And `loading="lazy"` came off the chart images: on an
+image with no intrinsic height it collapses the figure to zero, so a stack of
+them below the fold is never requested at all. That was a real trap found while
+looking for the wrong thing, not this bug.
+
+It took three wrong answers to get here — a stale server, a cache the user was
+asked to clear, a port shared with another project. The third was a genuine
+problem and not this one. The log was available from the moment it was switched
+on and beat every round of reasoning about what a browser had probably done.

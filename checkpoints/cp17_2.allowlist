@@ -1,0 +1,64 @@
+# CP17.2 — the chart that would not update.
+#
+# CP17.1 regenerated chart 1 with HYBRID on it. The browser kept showing the old
+# one through repeated reloads, while the page around it updated correctly —
+# HYBRID's column and the opt-outs row appeared, the chart did not. Same page,
+# two different ages.
+#
+# It took three wrong answers to find. The access log settled it in one line:
+#
+#     GET /                     200
+#     GET /out/viewer_data.json 404
+#     (no chart requests, ever)
+#
+# The browser had never asked this server for a PNG. Not the server, not the
+# port, not lazy loading. A cached image and a page with no way to say otherwise.
+
+settle/api/app.py
+viewer/index.html
+SPEC.md
+PLAN.md
+checkpoints/cp17_2.allowlist
+
+# --- Three fixes, one of which was the actual bug -----------------------------
+#
+# 1. THE FIX. Chart URLs carry a per-load token, `?v=<Date.now()>`. The URL is
+#    the only thing the page controls that a cache cannot ignore. Four local
+#    PNGs at ~110 KB: nothing is saved by caching them, and a stale chart during
+#    a demo is unrecoverable.
+#
+# 2. `Cache-Control: no-cache` on the viewer and the chart mount. Not "do not
+#    cache" — "revalidate before use": the browser keeps its copy and asks, an
+#    unchanged file costs a 304 and no bytes. Starlette sends an etag and no
+#    cache-control, which lets Chrome fall back to heuristic freshness and serve
+#    from memory without asking. This closes the same hole for the page and any
+#    JSON served later, where a `?v=` token would not help.
+#
+# 3. `loading="lazy"` removed and `aspect-ratio: 3/2` added. A real trap, found
+#    while looking for the wrong thing: an unloaded lazy image with `width:100%`
+#    and no height collapses to zero, four figures stack into a near-zero-height
+#    grid below the fold, the viewport heuristic never fires, and the browser
+#    never requests them at all — present in the DOM, absent from the network.
+#    Not what was happening here, because the images WERE displaying; they were
+#    displaying the wrong bytes. Fixed anyway, and the aspect-ratio means a
+#    failed chart now holds its box and shows alt text instead of vanishing.
+
+# --- What this cost, recorded rather than smoothed over -----------------------
+#
+# Three confident diagnoses before looking at the evidence: a stale server, a
+# browser cache the user was asked to clear, and a port shared with another
+# project. The second was the right layer and still produced advice ("hard
+# reload") instead of a fix. The third was a real problem and not this one.
+#
+# The access log existed from the moment it was enabled and disambiguated
+# everything at a glance. The lesson is not "check the cache" — it is that a
+# request log beats any amount of reasoning about what a browser probably did,
+# and it should have been the first move rather than the fourth.
+
+# --- Not changed --------------------------------------------------------------
+#
+# `/out/viewer_data.json` still 404s. The mount is `/out/charts` only, so the
+# page falls back to its embedded copy, which is correct and is what VIW-4
+# exercises. Serving it would let a regenerated run appear on reload without
+# re-embedding; it needs a decision about whether `/out/` widens beyond images,
+# and SPEC §16 fixes the route table at three.

@@ -77,7 +77,14 @@
   .tag.ok { color: var(--ours); border-color: #cfe5db; background: #f1f8f5; }
 
   figure { margin: 0 0 22px; }
-  figure img { width: 100%; border: 1px solid var(--line); border-radius: 8px; display: block; }
+  /* aspect-ratio gives the image a box before it loads, so a slow or failed
+     chart holds its place and shows its alt text instead of collapsing to
+     nothing and looking like a section that never rendered. */
+  figure img {
+    width: 100%; aspect-ratio: 3 / 2; object-fit: contain;
+    border: 1px solid var(--line); border-radius: 8px; display: block;
+    background: var(--panel);
+  }
   figcaption { color: var(--dim); font-size: 13px; margin-top: 6px; }
   .charts { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
 
@@ -215,6 +222,17 @@ const armTag = arm => arm === "B3"
  * Screen 1 — batch
  * ------------------------------------------------------------------ */
 
+// Charts are re-rendered whenever the report is re-run, and a browser that has
+// seen a chart once will keep showing it: the server sends an etag but no
+// cache-control, so Chrome is free to serve from memory without revalidating.
+// It did exactly that, for a whole debugging session, while the page around the
+// image updated correctly.
+//
+// The URL is the only thing the page controls that the cache cannot ignore, so
+// it carries a per-load token. Four local PNGs at ~110 KB: there is nothing to
+// save by caching them and a stale chart during a demo is unrecoverable.
+const CHART_VERSION = "?v=" + Date.now();
+
 const ARM_ORDER = ["OURS", "HYBRID", "B2", "B1", "B3", "B0"];
 const ARM_NAME = {
   OURS: "OURS", HYBRID: "HYBRID composed", B2: "B2 fixed ladder",
@@ -270,7 +288,13 @@ function renderBatch(data) {
   root.append(el("h2", { text: "Charts" }));
   root.append(el("div", { class: "charts" }, b.charts.map(c =>
     el("figure", {},
-      el("img", { src: "../out/charts/" + c.file, alt: c.title, loading: "lazy" }),
+      // Not lazy. Four local PNGs at ~110 KB each buy nothing from deferral,
+      // and `loading="lazy"` on an image with no intrinsic height is a trap: an
+      // unloaded lazy image collapses to zero, the four figures stack into a
+      // near-zero-height grid below the fold, the viewport heuristic never
+      // brings them into view, and the browser never requests them at all. The
+      // charts were in the DOM and absent from the access log.
+      el("img", { src: "../out/charts/" + c.file + CHART_VERSION, alt: c.title }),
       el("figcaption", {}, el("b", { text: c.title }), " — " + c.caption)))));
 
   /* per class */
