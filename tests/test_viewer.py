@@ -553,12 +553,14 @@ def test_VIW_6_the_two_origins_serve_the_same_bytes() -> None:
             assert on_disk == served, f"{src} differs between file:// and http://"
 
 
-def test_VIW_6_the_mount_does_not_widen_the_api_surface() -> None:
-    """SPEC §16 fixes the route table at exactly three.
+def test_VIW_6_the_chart_mount_adds_no_route_to_the_api_surface() -> None:
+    """The mount serves images without appearing in the route table.
 
     `StaticFiles` is a sub-application rather than a route, so it does not enter
-    the OpenAPI schema — which is why the charts could be served without the
-    fourth route CP14 rejected for exactly this reason.
+    the OpenAPI schema — which is why the charts could be served without adding
+    a route. The set below is §16's table (four as of A148, when
+    `/policy/decide` was added deliberately); the mount is absent from it, and
+    that absence is what this asserts.
     """
     from settle.api.app import app
 
@@ -570,6 +572,7 @@ def test_VIW_6_the_mount_does_not_widen_the_api_surface() -> None:
     assert declared == {
         ("/webhooks/razorpay", "POST"),
         ("/voice/extract", "POST"),
+        ("/policy/decide", "POST"),
         ("/", "GET"),
     }, "the chart mount widened the API surface"
 

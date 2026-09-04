@@ -475,3 +475,68 @@ It took three wrong answers to get here — a stale server, a cache the user was
 asked to clear, a port shared with another project. The third was a genuine
 problem and not this one. The log was available from the moment it was switched
 on and beat every round of reasoning about what a browser had probably done.
+
+## CP18 — screen 4, live case entry
+
+`POST /policy/decide` and a fourth screen. A judge types a case and watches OURS
+price every option it is allowed to take.
+
+Nothing was added to `choose()`. Its signature already takes everything needed,
+`legal` comes from `legal_actions` exactly as `case_runner` builds it, and
+`p_settle(do_nothing)` — shown because every EV is an uplift over it — is
+`p_success - uplift` rather than a widened signature or a second estimator call
+that could drift from the number the policy actually subtracted.
+
+DEC-1 is the test that matters. A live demo running a friendlier policy would be
+worth less than none, so the test constructs the case and state by hand, calls
+`policy.choose` directly, and requires the same decision and the same numbers,
+option by option — not a similar answer.
+
+Screen 4 renders through screen 2's alternatives table, which was extracted into
+one function. Two renderers would be free to drift, and the first time they did
+the live screen would be telling a judge something the batch did not.
+
+### The presets needed correcting before they demonstrated anything
+
+Two of the three did not do what they claimed. `time_shiftable` has no contact
+verbs at all under §9, so "watch G1 block contacts" and "watch G6 suppress
+contact" had nothing to block on an insufficient_funds case — the tables were
+correct and the demo was empty. `ambiguous` is the only class with both a retry
+and a message viable, so both presets moved to `do_not_honour`.
+
+The anchor moved too: 00:30 UTC put tick 0 at 06:00 IST, outside G1's window, so
+a judge hitting Decide immediately would have met a contact blocked by the clock
+as their first impression of the gates. It is 04:30 UTC now — 10:00 IST at tick
+0, 02:00 IST at tick 16.
+
+    Expired card          dead_instrument   retry ABSENT, not blocked
+    Bank said no, 02:00   ambiguous         send_message blocked by G1, retry legal
+    Already promised      ambiguous         send_message blocked by G6, retry legal
+
+### The route table
+
+§16 said exactly three and now says four, closed again. Two test files asserted
+the old count and neither was on CP18's allowlist, so CP18 ran 767 passed / 2
+failed and was reported rather than committed. CP18.1 fixes them.
+
+## CP18.1 — two stale assertions
+
+WBH-1 and VIW-6 both read the OpenAPI paths and compared them against a literal
+three-route set. `/policy/decide` is the fourth. One line each, approved from
+the patch recorded in checkpoints/cp18.allowlist.
+
+The names cost more thought than the edits. `WBH_1_the_app_declares_exactly_the
+_three_spec_routes` had the count in it, and the count was wrong one checkpoint
+after it was written — it is now `_the_spec_routes`, with the current number in
+the docstring where staleness is free. The assertion still pins the set exactly
+rather than a minimum, which is the property worth keeping. VIW-6 was renamed
+for a different reason: `the_mount_does_not_widen_the_api_surface` reads as a
+claim about the route count, when what it actually asserts is that a
+`StaticFiles` mount is a sub-application and never enters the schema at all. It
+is `_the_chart_mount_adds_no_route_to_the_api_surface` now.
+
+A test name that lies is the thing this project is about, and WBH-1's said three
+while the suite was green at four. The only thing that caught it was the
+assertion underneath, which is the wrong way round.
+
+CP18 and CP18.1 land as one commit.

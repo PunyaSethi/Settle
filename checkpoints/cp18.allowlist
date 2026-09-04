@@ -1,0 +1,83 @@
+# CP18 — screen 4, live case entry.
+#
+# POST /policy/decide prices one typed case through the live policy. A judge
+# types a case and watches OURS price every option it is allowed to take: same
+# legal_actions, same policy.choose, same estimator, same gates as the batch.
+#
+# Nothing was added to choose(). Its signature already takes everything needed,
+# and p_settle(do_nothing) — shown because every EV is an uplift over it — is
+# derived as p_success - uplift rather than by widening the function the batch
+# depends on, or by a second estimator call that could drift from the number the
+# policy actually subtracted.
+
+settle/api/decide.py
+settle/api/app.py
+viewer/index.html
+tests/test_decide.py
+SPEC.md
+PLAN.md
+README.md
+checkpoints/cp18.allowlist
+
+# --- BLOCKED: two test files assert the route table is exactly three ----------
+#
+# SPEC §16 said three routes; CP18 makes it four and §16 is amended to match
+# (A148). Two tests encode the old count and neither file is on this allowlist:
+#
+#   tests/test_webhook.py::test_WBH_1_the_app_declares_exactly_the_three_spec_routes
+#   tests/test_viewer.py::test_VIW_6_the_mount_does_not_widen_the_api_surface
+#
+# Both compare app.openapi()["paths"] against a literal set of three. Both now
+# see ("/policy/decide", "POST") as an extra item. Nothing else fails: the
+# endpoint, the screen, and DEC-1..5 are green, and so is every other assertion
+# in both files.
+#
+# There is no green-gate path from this allowlist. The endpoint is the
+# checkpoint, so it cannot be deferred the way CP14 deferred GET /, and hiding
+# it from the OpenAPI schema — mounting it as a sub-application, the trick that
+# let the chart route in at CP16.1 — would be worse than the failing test: a
+# first-class JSON API absent from /docs, contorted solely to satisfy an
+# assertion that the spec no longer agrees with.
+#
+# The fix is one line in each, and both are the same edit:
+#
+#   -    assert declared == {
+#   -        ("/webhooks/razorpay", "POST"),
+#   -        ("/voice/extract", "POST"),
+#   -        ("/", "GET"),
+#   -    }, "SPEC §16 fixes the route table at exactly three"
+#   +    assert declared == {
+#   +        ("/webhooks/razorpay", "POST"),
+#   +        ("/voice/extract", "POST"),
+#   +        ("/policy/decide", "POST"),
+#   +        ("/", "GET"),
+#   +    }, "SPEC §16 fixes the route table at exactly four (A148)"
+#
+# Add tests/test_webhook.py and tests/test_viewer.py to a CP18.1 allowlist and
+# it is two edits and a gate run.
+
+# --- The presets needed correcting before they demonstrated anything ----------
+#
+# Two of the three did not do what the checkpoint claimed, and the tables looked
+# perfectly fine while demonstrating nothing.
+#
+# `time_shiftable` has no contact verbs under §9 — its viable set is
+# {do_nothing, retry, serve_notice}. So on an insufficient_funds case there was
+# no message for G1 to block at 02:00 and none for G6 to suppress under a
+# promise. `ambiguous` is the only class with both a retry and a message viable,
+# so both presets use `do_not_honour`. The stated behaviour is what was kept;
+# the case was changed until it actually showed it.
+#
+# The anchor moved for the same reason. 00:30 UTC put tick 0 at 06:00 IST,
+# outside G1's 08:00-19:00 window, so a judge pressing Decide on the defaults
+# would have met a contact blocked by the clock as their first impression of the
+# gates — which reads as the demo being broken rather than as a rule working.
+# 04:30 UTC is 10:00 IST at tick 0 and 02:00 IST at tick 16.
+
+# --- One guard added for a reason worth stating -------------------------------
+#
+# `renderDecide` returns early when its section is missing. That is partly
+# because VIW-4's DOM shim in tests/test_viewer.py knows three section ids and
+# cannot be updated from here — but it is correct independently: boot renders
+# four screens in sequence, and an unguarded null in the fourth blanks the whole
+# page. One missing section should cost one screen.

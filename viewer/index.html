@@ -148,6 +148,29 @@
     text-align: center; color: var(--dim); background: var(--panel);
   }
   .drop.over { border-color: var(--ours); background: #f1f8f5; }
+
+  /* --- try a case --- */
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 10px 16px; margin: 12px 0; }
+  .form label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 3px; }
+  .form input, .form select {
+    font: inherit; font-size: 14px; width: 100%; padding: 6px 8px;
+    border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink);
+  }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .presets button {
+    font: inherit; font-size: 13px; padding: 8px 12px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+  }
+  .presets button:hover { border-color: var(--ours); }
+  button.primary {
+    font: inherit; font-size: 14px; font-weight: 600; padding: 9px 20px; cursor: pointer;
+    border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: #fff;
+  }
+  details.advanced { margin: 10px 0; }
+  details.advanced > summary { cursor: pointer; font-size: 13px; color: var(--dim); }
+  .errors { color: var(--warn); font-size: 13.5px; }
+  .errors li { margin: 2px 0; }
   pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
         padding: 12px; overflow-x: auto; font-size: 12.5px; }
   footer { color: var(--faint); font-size: 12.5px; padding: 26px 22px; max-width: 1180px; }
@@ -159,6 +182,7 @@
     <button role="tab" data-screen="batch" aria-selected="true">1 · Batch</button>
     <button role="tab" data-screen="trace" aria-selected="false">2 · Case trace</button>
     <button role="tab" data-screen="voice" aria-selected="false">3 · Voice lab</button>
+    <button role="tab" data-screen="decide" aria-selected="false">4 · Try a case</button>
   </nav>
 </header>
 
@@ -166,6 +190,7 @@
   <section id="batch"></section>
   <section id="trace" hidden></section>
   <section id="voice" hidden></section>
+  <section id="decide" hidden></section>
 </main>
 
 <footer id="provenance"></footer>
@@ -428,6 +453,28 @@ function renderTrace(data) {
   refresh();
 }
 
+/* The one alternatives table. Screen 2 renders decisions recorded during the
+ * batch; screen 4 renders one computed live. They are the same shape because
+ * they come from the same policy, so they get the same renderer — two would be
+ * free to disagree, and the first time they did, the live screen would be
+ * quietly telling a judge something the run did not.
+ */
+function alternativesTable(alternatives) {
+  const rows = alternatives.map(a => ({
+    rowClass: a.chosen ? "chosen" : (a.legal ? null : "blocked"),
+    cells: [
+      { text: a.action_label, class: "" },
+      a.p_settle_pct, a.ev_rupees,
+      { node: a.legal
+          ? el("span", { class: "tag ok", text: "legal" })
+          : el("span", { class: "tag block", text: "blocked" }), class: "num" },
+      { text: a.block_gate || "—", class: "num" },
+    ],
+  }));
+  return table(["Option", "P(settle)", "EV (₹)", "Legal", "Blocked by"], rows,
+               { num: ["P(settle)", "EV (₹)"] });
+}
+
 function caseDetail(t) {
   const o = t.observed, r = t.reconciliation;
   const frag = el("div", {});
@@ -475,25 +522,12 @@ function caseDetail(t) {
         `p ${d.p_settle_pct} · uplift ${d.uplift_pct} · EV ₹${d.expected_value_rupees}` }),
       d.n_blocked ? el("span", { class: "tag block", text: `${d.n_blocked} blocked` }) : null);
 
-    const rows = d.alternatives.map(a => ({
-      rowClass: a.chosen ? "chosen" : (a.legal ? null : "blocked"),
-      cells: [
-        { text: a.action_label, class: "" },
-        a.p_settle_pct, a.ev_rupees,
-        { node: a.legal
-            ? el("span", { class: "tag ok", text: "legal" })
-            : el("span", { class: "tag block", text: "blocked" }), class: "num" },
-        { text: a.block_gate || "—", class: "num" },
-      ],
-    }));
-
     frag.append(el("details", { class: "decision" }, summary,
       el("div", { class: "body" },
         el("p", { class: "muted", text:
           `${d.n_alternatives} options were priced. Sorted by expected value; the chosen ` +
           `row is marked. A blocked row names the gate that stopped it.` }),
-        table(["Option", "P(settle)", "EV (₹)", "Legal", "Blocked by"], rows,
-              { num: ["P(settle)", "EV (₹)"] }))));
+        alternativesTable(d.alternatives))));
   }
 
   /* timeline */
@@ -662,11 +696,217 @@ function renderExtraction(p) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Screen 4 — try a case. Needs the API, and says so from file://.
+ *
+ * The form is convenience; the presets are the demo. Each loads a case
+ * chosen so one specific mechanism is visible, and each is worth more
+ * than typing on camera.
+ * ------------------------------------------------------------------ */
+
+const DECIDE_FIELDS = [
+  ["decline_code", "Decline code", "select",
+   ["insufficient_funds", "do_not_honour", "acquirer_declined", "issuer_error_91",
+    "npci_rc_u69", "gateway_timeout", "issuer_down", "card_expired", "card_stolen",
+    "mandate_revoked", "authentication_failed", "fraud_flagged"]],
+  ["rail", "Rail", "select", ["card", "upi_autopay", "enach"]],
+  ["mandate_state", "Mandate", "select", ["active", "expired", "revoked", "none"]],
+  ["amount_paise", "Amount (paise)", "number", null],
+  ["attempt_number", "Attempt number", "number", null],
+  ["tenure_months", "Tenure (months)", "number", null],
+  ["prior_failures", "Prior failures", "number", null],
+  ["prior_recoveries", "Prior recoveries", "number", null],
+  ["language", "Language", "select", ["en", "hi", "hinglish"]],
+  ["consent_whatsapp", "WhatsApp consent", "select", ["true", "false"]],
+  ["dnd_flag", "DND", "select", ["false", "true"]],
+];
+
+const DECIDE_ADVANCED = [
+  ["tick", "Tick (hours since created_at)", "number"],
+  ["attempts_used", "Attempts used", "number"],
+  ["contacts_used", "Contacts used", "number"],
+  ["card_submissions_used", "Card submissions used", "number"],
+  ["promise_date", "Promise date (YYYY-MM-DD)", "text"],
+  ["opted_out", "Opted out", "select"],
+  ["disputed", "Disputed", "select"],
+];
+
+const DECIDE_DEFAULTS = {
+  decline_code: "insufficient_funds", rail: "card", mandate_state: "active",
+  amount_paise: 249900, attempt_number: 1, tenure_months: 6,
+  prior_failures: 0, prior_recoveries: 0, language: "hinglish",
+  consent_whatsapp: "true", dnd_flag: "false",
+  tick: 0, attempts_used: 0, contacts_used: 0, card_submissions_used: 0,
+  promise_date: "", opted_out: "false", disputed: "false",
+};
+
+const DECIDE_PRESETS = [
+  {
+    name: "Expired card",
+    why: "dead_instrument — retry is absent from the option set entirely, not blocked.",
+    values: { decline_code: "mandate_revoked", mandate_state: "revoked", tick: 0 },
+  },
+  {
+    name: "Bank said no, 02:00",
+    why: "ambiguous at 02:00 IST — G1 blocks the message; the silent retry stays legal.",
+    values: { decline_code: "do_not_honour", mandate_state: "active", tick: 16 },
+  },
+  {
+    name: "Already promised",
+    why: "a live promise — G6 suppresses contact; the retry still passes.",
+    values: { decline_code: "do_not_honour", mandate_state: "active", tick: 0,
+              promise_date: "2026-01-25" },
+  },
+];
+
+function renderDecide() {
+  const root = document.getElementById("decide");
+  // A screen whose mount point is absent should not take the other three down
+  // with it. Boot renders all four in sequence, so an unguarded null here means
+  // one missing section blanks the whole page.
+  if (!root) return;
+  root.replaceChildren();
+  const served = location.protocol !== "file:";
+
+  root.append(
+    el("h2", { text: "Try a case" }),
+    el("p", { class: "lede", text:
+      "Type a case and watch the policy price every option it is allowed to take. " +
+      "Same policy, same gates, same estimator as the 10,000-case run — this screen " +
+      "computes nothing of its own, and the table below is the one screen 2 uses." }));
+
+  if (!served) {
+    root.append(el("div", { class: "callout warn" },
+      el("p", { html: "<b>This screen needs the API.</b> Screens 1 and 2 work from " +
+        "the filesystem; pricing a case posts to <code>POST /policy/decide</code>, " +
+        "which a <code>file://</code> page cannot reach." }),
+      el("p", { html: "Start it with <code>uvicorn settle.api.app:app --port 8002</code> " +
+        "and open <code>http://127.0.0.1:8002/</code>." })));
+    return;
+  }
+
+  const inputs = {};
+  const field = (key, label, kind, options) => {
+    const node = kind === "select"
+      ? el("select", { id: "f-" + key },
+          (options || ["false", "true"]).map(o => el("option", { value: o, text: o })))
+      : el("input", { id: "f-" + key, type: kind });
+    node.value = String(DECIDE_DEFAULTS[key] ?? "");
+    inputs[key] = node;
+    return el("div", {}, el("label", { text: label }), node);
+  };
+
+  const form = el("div", { class: "form" },
+    DECIDE_FIELDS.map(([k, l, kind, opts]) => field(k, l, kind, opts)));
+  const advanced = el("details", { class: "advanced" },
+    el("summary", { text: "Advanced — case state overrides (tick, budgets, promise, opt-out)" }),
+    el("div", { class: "form" }, DECIDE_ADVANCED.map(([k, l, kind]) => field(k, l, kind))));
+
+  const presets = el("div", { class: "presets" }, DECIDE_PRESETS.map((p, i) =>
+    el("button", { type: "button", "data-preset": String(i) },
+      el("b", { text: p.name }))));
+  const presetWhy = el("p", { class: "muted", text: DECIDE_PRESETS.map(p => p.why).join("  ·  ") });
+
+  const out = el("div", { id: "decide-out" });
+  const go = el("button", { class: "primary", type: "button", text: "Decide" });
+
+  const body = () => {
+    const payload = {};
+    for (const [key, node] of Object.entries(inputs)) {
+      const raw = node.value;
+      if (raw === "" || raw === null) continue;
+      if (raw === "true" || raw === "false") payload[key] = raw === "true";
+      else if (node.type === "number") payload[key] = Number(raw);
+      else payload[key] = raw;
+    }
+    return payload;
+  };
+
+  const submit = async () => {
+    out.replaceChildren(el("p", { class: "muted", text: "Pricing…" }));
+    let response, payload;
+    try {
+      response = await fetch("/policy/decide", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body()),
+      });
+      payload = await response.json();
+    } catch (err) {
+      out.replaceChildren(el("div", { class: "callout warn" },
+        el("p", { text: "The request failed: " + err.message })));
+      return;
+    }
+    if (!response.ok) {
+      out.replaceChildren(el("div", { class: "callout warn" },
+        el("p", {}, el("b", { text: payload.reason_code || String(response.status) })),
+        el("p", { text: payload.detail || "" }),
+        payload.errors
+          ? el("ul", { class: "errors" }, payload.errors.map(e =>
+              el("li", { text: e.field + ": " + e.message })))
+          : null));
+      return;
+    }
+    out.replaceChildren(renderDecision(payload));
+  };
+
+  go.addEventListener("click", submit);
+  presets.addEventListener("click", ev => {
+    const button = ev.target.closest("button[data-preset]");
+    if (!button) return;
+    const preset = DECIDE_PRESETS[Number(button.dataset.preset)];
+    for (const [key, node] of Object.entries(inputs)) {
+      node.value = String(preset.values[key] ?? DECIDE_DEFAULTS[key] ?? "");
+    }
+    submit();
+  });
+
+  root.append(
+    el("h3", { text: "Start here" }), presets, presetWhy,
+    form, advanced, go, out);
+}
+
+function renderDecision(p) {
+  const frag = el("div", {});
+  const d = p.decision, dg = p.diagnosis;
+
+  frag.append(el("h3", { text: "Diagnosis" }));
+  frag.append(el("p", {},
+    el("span", { class: "tag", text: dg.decline_class }), " ",
+    el("span", { class: "tag", text: p.state.ist_hour + ":00 IST" }), " ",
+    el("span", { class: "tag", text: dg.n_legal_actions + " legal actions" }), " ",
+    dg.escalation_eligible
+      ? el("span", { class: "tag", text: "escalation eligible" }) : null));
+
+  if (dg.excluded_verbs.length) {
+    frag.append(el("p", { class: "muted", text:
+      "Excluded by the class, so never candidates: " +
+      dg.excluded_verbs.map(v => v.action_type).join(", ") +
+      ". An excluded verb is not a blocked one — it was never on the table." }));
+  }
+
+  frag.append(el("h3", { text: "Decision" }));
+  frag.append(el("p", {},
+    el("b", { text: d.chosen_label }), " ",
+    el("span", { class: "tag", text: d.reason_code }), " ",
+    el("span", { class: "muted", text:
+      `p ${d.p_settle_pct} · do_nothing ${d.p_settle_do_nothing_pct} · ` +
+      `uplift ${d.uplift_pct} · EV ₹${d.expected_value_rupees}` }),
+    d.economic_stop ? el("span", { class: "tag block", text: "S7 economic stop" }) : null,
+    d.n_blocked ? el("span", { class: "tag block", text: `${d.n_blocked} blocked` }) : null));
+
+  frag.append(el("p", { class: "muted", text:
+    `${d.n_alternatives} options were priced against p(settle | do_nothing) = ` +
+    `${d.p_settle_do_nothing_pct}. Every EV is an uplift over that.` }));
+  frag.append(alternativesTable(p.alternatives));
+  return frag;
+}
+
+/* ------------------------------------------------------------------ *
  * Boot
  * ------------------------------------------------------------------ */
 
 function screens(name) {
-  for (const s of ["batch", "trace", "voice"])
+  for (const s of ["batch", "trace", "voice", "decide"])
     document.getElementById(s).hidden = s !== name;
   for (const b of document.querySelectorAll("nav button"))
     b.setAttribute("aria-selected", String(b.dataset.screen === name));
@@ -698,6 +938,7 @@ async function load() {
   renderBatch(data);
   renderTrace(data);
   renderVoice();
+  renderDecide();
   document.getElementById("provenance").textContent =
     `${data.meta.cases_display} cases, seed ${data.meta.seed}. ` +
     `Generated ${data.meta.generated_at}. ${data.meta.note}`;

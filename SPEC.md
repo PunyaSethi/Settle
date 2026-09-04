@@ -1254,13 +1254,21 @@ constants happen to be equal**, and it will keep holding if either of them moves
 
 Real at the edges, simulated at scale.
 
-- Three FastAPI routes, and exactly three:
+- Four FastAPI routes, and exactly four:
 
   ```
   POST /webhooks/razorpay   signature-verified webhook receiver
   POST /voice/extract       upload audio, returns full extraction trace
+  POST /policy/decide       price one typed case through the live policy
   GET  /                    serves the static viewer
   ```
+
+  Three until CP18. `/policy/decide` is the fourth and the count is closed
+  again: it exists so a judge can type a case and watch OURS price every option,
+  which no static artefact can show, and it adds no mechanism — it builds an
+  `ObservedCase` and a `CaseState`, calls `legal_actions` and `policy.choose`,
+  and formats the result. Widening the table needs an amendment arguing the
+  case, not a checkpoint noticing it wants an endpoint.
 
   A route that is declared and not yet built returns 501, never 404. The route
   table is a contract; one that grows to fit whatever got implemented is not.
@@ -1763,3 +1771,7 @@ Resolved:
 - 2026-09-04 — A145: Known Limitations — OURS forgoing 3.5 points of recovery is recorded as a choice with a measured price rather than as a weakness. A merchant valuing recovered rupees above customer contact should prefer HYBRID, and the table is the case for it. Our ordering is a product judgement the evidence does not force: 28.37% is the best number available *under a constraint we chose*, and the unconstrained figure is 31.87%.
 - 2026-09-04 — A146: §16 — the viewer and the chart mount send `Cache-Control: no-cache`, and chart URLs carry a per-load token. Starlette sends an etag and no cache-control, which lets a browser fall back to heuristic freshness and serve an image from memory without revalidating. It did: CP17.1's regenerated chart 1 was invisible through repeated reloads while the page around it updated correctly, and the access log showed the browser had never requested a PNG from the server at all. `no-cache` means revalidate, not do-not-store — an unchanged file still costs a 304.
 - 2026-09-04 — A147: §3 — the viewer's chart images are not lazy-loaded and carry an explicit aspect ratio. `loading="lazy"` on an image with `width:100%` and no height collapses it to zero, so several stacked figures below the fold never enter the viewport heuristic and are never requested — present in the DOM and absent from the network. Four committed PNGs gain nothing from deferral.
+- 2026-09-04 — A148: §16 — `POST /policy/decide` added and the route table closed again at four. It prices one typed case through the live policy: same `legal_actions`, same `policy.choose`, same estimator, same gates as the batch. It adds no decision logic and `choose()` was not modified — its signature already takes everything needed, and `p_settle(do_nothing)`, which the screen shows because every EV is an uplift over it, is derived as `p_success - uplift` rather than by widening the function the batch depends on. Test DEC-1 compares the endpoint against `choose()` called directly, option by option.
+- 2026-09-04 — A149: §9 — the live screen distinguishes a verb EXCLUDED by the decline class from one BLOCKED by a gate. They look identical in a results table and mean opposite things: a retry on a revoked mandate is not a blocked retry, it was never a candidate. Reported as a difference against the closed verb set so "no retry option" reads as a diagnosis. Test DEC-2.
+- 2026-09-04 — A150: §3 — screen 4 renders through the same alternatives table as screen 2. Two renderers would be free to drift, and the first time they did, the live screen would be telling a judge something the batch run did not. Test DEC-5.
+- 2026-09-04 — A151: §9 — two of screen 4's three presets demonstrated nothing and were corrected before they shipped. `time_shiftable`'s viable set is `{do_nothing, retry}`, so presets built to show G1 blocking a contact at 02:00 and G6 suppressing one against a promise had no contact verb to block: both tables were arithmetically correct and both demos were empty. Both moved to `do_not_honour`, `ambiguous` being the only class carrying a retry and a message at once. The tick-0 anchor moved with them, 00:30 UTC to 04:30 UTC, because 06:00 IST sits outside G1's window and a judge pressing Decide on an untouched form would otherwise have met a contact blocked by the clock as their first impression of the gates. Recorded because it is this project's own failure class on its own demo surface: a screen that looked right, said nothing, and would have passed unexamined. Test DEC-3 asserts what each preset blocks, by gate, so a preset that stops demonstrating its gate fails rather than goes quiet.

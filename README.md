@@ -337,6 +337,32 @@ The Razorpay edge runs without credentials:
 python scripts/razorpay_demo.py       # MOCK_SANDBOX, no keys needed
 ```
 
+The viewer opens from the filesystem — `viewer/index.html`, no server, no build
+step. Screens 3 and 4 need the API and say so when opened from disk:
+
+```bash
+uvicorn settle.api.app:app --port 8002    # then http://127.0.0.1:8002/
+```
+
+**Screen 4 prices a case you type.** `POST /policy/decide` runs the same
+`legal_actions`, the same `policy.choose` and the same estimator as the
+10,000-case run, and renders through screen 2's table — so the live answer is
+the one the batch would have given for that case, and `DEC-1` asserts it against
+`choose()` called directly rather than checking the output looks reasonable.
+
+Three presets show one mechanism each, and they are the demo:
+
+| preset | what to watch |
+|---|---|
+| **Expired card** | `dead_instrument` — retry is **absent** from the option set, not blocked. §9 never made it a candidate. |
+| **Bank said no, 02:00** | `ambiguous` at 02:00 IST — G1 blocks the message, the silent retry stays legal. A debit wakes nobody. |
+| **Already promised** | a live promise — G6 suppresses contact, the retry still passes. We stop asking and keep trying. |
+
+The screen distinguishes the two ways an option can be unavailable, because they
+look identical in a table and mean opposite things: **excluded** by the decline
+class, so never priced, against **blocked** by a named gate after being priced —
+sometimes with the best expected value on the screen.
+
 ---
 
 ## 5. How the thresholds were chosen

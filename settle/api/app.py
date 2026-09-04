@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from settle.api.decide import router as decide_router
 from settle.api.voice import router as voice_router
 from settle.api.webhook import router as webhook_router
 
@@ -39,6 +40,7 @@ app = FastAPI(
 
 app.include_router(webhook_router)
 app.include_router(voice_router)
+app.include_router(decide_router)
 
 
 VIEWER: Final[Path] = Path(__file__).resolve().parents[2] / "viewer" / "index.html"

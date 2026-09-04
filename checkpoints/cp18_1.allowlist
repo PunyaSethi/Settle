@@ -1,0 +1,79 @@
+# CP18.1 — two stale assertions, then commit.
+#
+# CP18 shipped `/policy/decide` and closed §16's route table at four. Two tests
+# still asserted three:
+#
+#   tests/test_webhook.py::test_WBH_1_the_app_declares_exactly_the_three_spec_routes
+#   tests/test_viewer.py::test_VIW_6_the_mount_does_not_widen_the_api_surface
+#
+# Neither file was on the CP18 allowlist, so CP18 stopped at 767 passed / 2
+# failed and was reported rather than committed. The exact patch was recorded in
+# checkpoints/cp18.allowlist and approved verbatim. The test was stale, not the
+# code.
+
+tests/test_webhook.py
+tests/test_viewer.py
+SPEC.md
+PLAN.md
+checkpoints/cp18_1.allowlist
+
+# --- CP18's files, landing in the same commit ---------------------------------
+#
+# The instruction is "commit CP18 and CP18.1 together", and the gate's baseline
+# is CP17.2, so one gate run has to see both checkpoints' changes. These are
+# CP18's paths, carried forward unchanged from checkpoints/cp18.allowlist. No
+# CP18 file was edited during CP18.1 except SPEC.md and PLAN.md, which are on
+# both lists.
+
+settle/api/decide.py
+settle/api/app.py
+viewer/index.html
+tests/test_decide.py
+README.md
+checkpoints/cp18.allowlist
+
+# --- F42. The renames ---------------------------------------------------------
+#
+# The edits were one line each. The names were the harder half.
+#
+#   test_WBH_1_the_app_declares_exactly_the_three_spec_routes
+#     -> test_WBH_1_the_app_declares_exactly_the_spec_routes
+#
+# The count came out of the name. It was wrong within one checkpoint of being
+# written and would have been wrong again at five; the assertion still pins the
+# set exactly, which is the property worth having, and the docstring carries the
+# current number where a stale one costs nothing.
+#
+#   test_VIW_6_the_mount_does_not_widen_the_api_surface
+#     -> test_VIW_6_the_chart_mount_adds_no_route_to_the_api_surface
+#
+# This one read as though it were about the route count. It is not: it is about
+# a `StaticFiles` mount being a sub-application rather than a route, so the
+# charts could be served without the fourth route CP14 rejected. The route set
+# is the backdrop; the mount's absence from it is the claim.
+#
+# A test name that lies is the thing this project is about. WBH-1's said three
+# while the suite was green at four for the length of one checkpoint — it was
+# only ever going to be caught by the assertion underneath it, which is the
+# wrong way round.
+
+# --- F43. The preset correction ----------------------------------------------
+#
+# SPEC A151, and PLAN under CP18.
+#
+# Two of screen 4's three presets were built on `time_shiftable`, whose viable
+# set under §9 is {do_nothing, retry}. G1 blocks contacts. G6 suppresses
+# contacts. Neither had a contact to act on, so both screens rendered a correct
+# table that demonstrated nothing — no wrong number, no error, nothing to notice
+# unless you already knew what the gate was supposed to do.
+#
+# Both moved to `do_not_honour`. `ambiguous` is the only class carrying a retry
+# and a message at once, which is what makes "the gate stopped the message and
+# left the retry running" visible at all.
+#
+# The anchor moved with them: 00:30 UTC put tick 0 at 06:00 IST, outside G1's
+# window, so an untouched form's first Decide met a contact blocked by the
+# clock. 04:30 UTC is 10:00 IST at tick 0 and 02:00 IST at tick 16.
+#
+# Worth the amendment because it is SF-shaped: silent, self-consistent, and on
+# the one surface a judge was going to look at.

@@ -482,9 +482,13 @@ def test_WBH_6_an_unsubscribed_event_is_recorded_and_flagged(edge: Path) -> None
 # The route table — SPEC §16 fixes it at three
 # --------------------------------------------------------------------------
 
-def test_WBH_1_the_app_declares_exactly_the_three_spec_routes(edge: Path) -> None:
-    """All three do their job as of CP15. The table is the contract; what each
-    route returns is checked underneath."""
+def test_WBH_1_the_app_declares_exactly_the_spec_routes(edge: Path) -> None:
+    """The table is the contract; what each route returns is checked underneath.
+
+    Four as of CP18 (A148). The count is not the point — the point is that it
+    cannot grow without an amendment, so this asserts the set exactly rather
+    than a minimum.
+    """
     # Read from the OpenAPI schema rather than `app.routes`: FastAPI keeps an
     # included router as one nested object, so walking `app.routes` would report
     # the two decorated stubs and silently miss the route that matters.
@@ -496,8 +500,9 @@ def test_WBH_1_the_app_declares_exactly_the_three_spec_routes(edge: Path) -> Non
     assert declared == {
         ("/webhooks/razorpay", "POST"),
         ("/voice/extract", "POST"),
+        ("/policy/decide", "POST"),
         ("/", "GET"),
-    }, "SPEC §16 fixes the route table at exactly three"
+    }, "SPEC §16 fixes the route table at exactly four (A148)"
 
     # Both were 501 stubs until CP15. `/voice/extract` extracts now and `GET /`
     # serves viewer/index.html (A129, A133); the table is still the three §16
