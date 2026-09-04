@@ -58,6 +58,9 @@ INK: Final[str] = "#1a1a1a"
 OURS: Final[str] = "#0b6e4f"
 BASE: Final[str] = "#8a8a8a"
 WARN: Final[str] = "#b3421a"
+# HYBRID. Its own colour because it is its own kind of thing: not the policy, not
+# a baseline, and not a competitor — two arms already on this chart, composed.
+COMPOSED: Final[str] = "#6b4fa8"
 GRID: Final[str] = "#dcdcdc"
 
 DPI: Final[int] = 160
@@ -107,7 +110,7 @@ def recovery_vs_contacts(data: dict[str, Any], out: Path) -> Path:
     with their true value written on them, because log(0) has no position.
     """
     arms = data["arms"]
-    figure, ax = plt.subplots(figsize=(8.6, 5.4))
+    figure, ax = plt.subplots(figsize=(9.0, 6.0))
     _style(ax)
 
     ours = arms.get("OURS")
@@ -120,30 +123,54 @@ def recovery_vs_contacts(data: dict[str, Any], out: Path) -> Path:
 
     for name, x, y, true_contacts in points:
         is_ours = name == "OURS"
-        # B3 recovers more than OURS and the chart must not let that pass
-        # unqualified. It runs in OBSERVE: the gates are evaluated and their
-        # verdicts are not binding, so its recovery is bought with compliance
-        # breaches that no arm in ENFORCE is permitted. Drawn in the warning
-        # colour, with the violation count on the label.
+        # Two arms on this chart are not competitors, and an unmarked point
+        # invites exactly the misreading the marking prevents.
+        #
+        # B3 recovers more than OURS and runs in OBSERVE: the gates are
+        # evaluated and their verdicts do not bind, so its recovery is bought
+        # with compliance breaches no arm in ENFORCE is permitted.
+        #
+        # HYBRID recovers more than OURS and is a measurement of class-based
+        # routing — OURS on auth_abandoned, B2's ladder everywhere else. It is
+        # two points already on this chart, composed, and its cost is the
+        # contact volume the x-axis is about.
         violating = arms[name]["compliance_violations"] > 0
-        colour = OURS if is_ours else (WARN if violating else BASE)
+        composed = name == "HYBRID"
+        colour = (
+            OURS if is_ours
+            else COMPOSED if composed
+            else WARN if violating
+            else BASE
+        )
         ax.scatter(
             x, y,
-            s=260 if is_ours else 150,
+            s=260 if is_ours else 190 if composed else 150,
             color=colour,
             zorder=3, edgecolor="white", linewidth=1.5,
+            marker="D" if composed else "o",
         )
         label = f"{name}\n{true_contacts:.3g} contacts/case"
         if violating:
             label += f"\nOBSERVE — {arms[name]['compliance_violations']:,} violations"
-        ha = "center"
-        offset_x = 0
-        if name == "B3":
-            ha, offset_x = "right", -14
+        if composed:
+            label += "\nCOMPOSED — OURS + B2 by class"
+        # Placed by region rather than by nudging. The four crowded points sit
+        # in the top right, so B3's label goes down-left below the title and
+        # HYBRID's goes left at its own height into the empty middle;
+        # B2's drops below its point, where nothing else is. Three labels that
+        # each want the same 200 pixels is what an unplaced legend looks like.
+        placement = {
+            "B3": ("right", -16, -30),
+            "HYBRID": ("right", -18, -4),
+            "B2": ("center", 0, -34),
+        }
+        ha, offset_x, offset_y = placement.get(
+            name, ("center", 0, 20 if is_ours else -34)
+        )
         ax.annotate(
             label, (x, y),
             textcoords="offset points",
-            xytext=(offset_x, 20 if is_ours else -46 if violating else -34),
+            xytext=(offset_x, offset_y),
             ha=ha, fontsize=11,
             color=colour if (is_ours or violating) else INK,
             fontweight="bold" if is_ours else "normal",
@@ -182,15 +209,20 @@ def recovery_vs_contacts(data: dict[str, Any], out: Path) -> Path:
     ax.set_xticklabels(["0.01", "0.1", "1.0"])
     ax.set_xticks([], minor=True)
     meta = data["meta"]
-    ax.text(
-        0, -0.22,
+    # figure.text, not ax.text: the caption is four lines and belongs to the
+    # figure's reserved margin rather than to the axes, where it collided with
+    # the x-label whatever offset it was given.
+    figure.subplots_adjust(left=0.11, right=0.97, top=0.90, bottom=0.24)
+    figure.text(
+        0.11, 0.035,
         f"{meta['cases']:,} synthetic cases, seed {meta['seed']}. "
         "Arms at zero contacts are drawn at the axis floor.\n"
         "Only B3 runs in OBSERVE; every other arm's gates bind, and its extra "
-        "recovery is bought with compliance breaches.",
-        transform=ax.transAxes, fontsize=9.5, color=BASE,
+        "recovery is bought with compliance breaches.\n"
+        "HYBRID is not a competitor: OURS and B2 composed and routed by decline "
+        "class. It is not the submitted policy.",
+        fontsize=9.5, color=BASE,
     )
-    figure.tight_layout()
     figure.savefig(out, dpi=DPI, facecolor="white")
     plt.close(figure)
     return out

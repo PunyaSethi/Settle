@@ -1,0 +1,56 @@
+# CP17.1 — chart 1, then commit.
+#
+# CP17 measured HYBRID and could not draw it. Neither `settle/eval/charts.py`
+# nor `out/charts/` was on its allowlist, and the omission was not cosmetic:
+# `charts.py` draws every arm in `metrics.json`, so the moment HYBRID entered
+# that file the committed PNG went stale and CHT-1 failed. This closes it.
+
+settle/eval/charts.py
+out/charts/
+README.md
+KNOWN_LIMITATIONS.md
+viewer/index.html
+SPEC.md
+PLAN.md
+checkpoints/cp17_1.allowlist
+
+# --- F38: marked, not merely present -----------------------------------------
+#
+# HYBRID gets its own colour, a diamond marker, and a COMPOSED label naming what
+# it is made of — the treatment B3 gets for OBSERVE, for the same reason. An
+# unmarked point on a recovery-against-contacts chart reads as a rival policy,
+# and HYBRID is a measurement of class-based routing that is explicitly not the
+# submitted policy. A chart that let that pass unqualified would be doing the
+# thing the per-class breakdown exists to prevent.
+#
+# The four crowded points are placed by region rather than by nudged offsets.
+# Two rounds of nudging produced a chart with B3's label written over the title
+# and HYBRID's running off the right edge; a placement map fixed it in one. The
+# caption moved to `figure.text` in a reserved margin, because at four lines it
+# collided with the x-label whatever axes offset it was given.
+
+# --- F40: stated as a choice, with the price attached -------------------------
+#
+# The Known Limitations entry says OURS forgoes 3.5 points of recovery — Rs
+# 227,318 on this batch — deliberately, and that a merchant valuing recovered
+# rupees above customer contact should prefer HYBRID. The table there is the
+# case FOR the alternative rather than against it.
+#
+# That is the honest shape. Our ordering is a product judgement the evidence
+# does not force: it rests on holding that 285 opt-outs and 50 people chased
+# after they had already paid outweigh Rs 227,318, and a merchant with different
+# churn economics can reasonably weigh it the other way. What the section
+# refuses to do is present 28.37% as the best available number. It is the best
+# number available under a constraint we chose, and the unconstrained figure is
+# 31.87%.
+
+# --- What is deliberately NOT here --------------------------------------------
+#
+# The viewer's per-class table still compares OURS against B2 only. Adding a
+# HYBRID column needs `_class_rows` in `settle/eval/report.py`, which is not on
+# this allowlist, and F41 asked for the batch table — which has HYBRID marked
+# COMPOSED and now carries an opt-outs-induced row, the number that makes the
+# tradeoff legible at a glance.
+#
+# The per-class data is in `out/viewer_data.json` under `by_decline_class`
+# already, so the column is a rendering change whenever report.py next opens.

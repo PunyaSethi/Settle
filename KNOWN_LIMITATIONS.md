@@ -260,6 +260,36 @@ the robust part of the result, not the recovery gap. Second, we do not know
 where it settles: 10,000 is the largest batch we run, so we can say the margin
 shrank between our two sizes but not that it has converged.
 
+### OURS forgoes 3.5 points of recovery, deliberately
+
+This is a choice with a price, and the price is now measured rather than
+asserted.
+
+HYBRID — `auth_abandoned` to OURS, the fixed ladder everywhere else — recovers
+**31.87% against our 28.37%**. On a 10,000-case batch that is ₹227,318 we do not
+collect. We could ship it today; it composes two arms already in the repo and
+needs no new model, mechanism or parameter.
+
+We do not, because of what the 3.5 points cost:
+
+| | OURS | HYBRID |
+|---|---|---|
+| Contacts | 36 | 9,192 |
+| Opt-outs induced | 1 | 285 |
+| Cost per ₹100 recovered | ₹0.0892 | ₹0.2084 |
+| Customers already paid, contacted again | 1 | 50 |
+| SF-2 as a share of the blind set | 0.1% | 5.4% |
+
+**What it costs, and who should disagree with us.** A merchant who values
+recovered rupees above customer contact should prefer HYBRID, and the numbers
+above are the case for it rather than against it. Our ordering — restraint
+first — is a product judgement, not a result the evidence forces. It rests on
+holding that 285 opt-outs and 50 people chased after they had already paid are
+worth more than ₹227,318, and a merchant with different churn economics can
+reasonably weigh that the other way. What we will not do is present 28.37% as
+the best available number: it is the best number available *under a constraint
+we chose*, and the unconstrained figure is 31.87%.
+
 ### HYBRID measures a ceiling, not a policy we could ship
 
 CP17 routed `auth_abandoned` to OURS and everything else to B2's ladder. It

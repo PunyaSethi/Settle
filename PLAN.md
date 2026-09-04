@@ -429,3 +429,26 @@ against its pre-run copy field by field.
 
 `opt_outs_induced` was listed in §14.4 from CP0 and produced by nothing. HYBRID
 is what made the gap conspicuous, and it is counted now from the ledger.
+
+## CP17.1 — chart 1, and the price named
+
+Chart 1 marks HYBRID the way it marks B3: its own colour, a diamond, and a
+COMPOSED label naming what it is made of. CP17 could not do this — neither
+`charts.py` nor `out/charts/` was on its allowlist — and the omission was not
+cosmetic: `charts.py` draws every arm in `metrics.json`, so HYBRID entering that
+file made the committed PNG stale and CHT-1 failed. It is green again.
+
+The four crowded points are now placed by region rather than by nudged offsets.
+Three labels wanting the same 200 pixels is what an unplaced legend looks like,
+and two rounds of nudging produced a chart with the title overwritten before the
+placement map fixed it.
+
+Known Limitations gained the entry that matters most for how the result reads:
+OURS forgoes 3.5 points of recovery **by choice**, and the price is now measured
+rather than asserted. A merchant who values recovered rupees above customer
+contact should prefer HYBRID, and the table there is the case for it rather than
+against it. 28.37% is the best number available under a constraint we chose; the
+unconstrained figure is 31.87%.
+
+The viewer's batch table carries HYBRID marked COMPOSED, and gained an
+opt-outs-induced row — the number that makes the tradeoff legible at a glance.

@@ -453,15 +453,21 @@ The five that would change how you read the numbers above:
 
 ## 8. Next steps
 
-The margin is concentrated in one decline class. We tested the obvious
+The margin is concentrated in one decline class, so we tested the obvious
 alternative: route auth_abandoned to our policy and the fixed ladder everywhere
-else. HYBRID recovers 31.87% against our 28.37%, at 0.9192 contacts per case
-against our 0.0036.
+else.
 
-It recovers more. It also contacts 255 times as many people, which is the thing
-we set out not to do. We are reporting the policy we built and measured, not the
-one this result implies — and we are reporting the alternative rather than
-leaving a reader to wonder whether we tried it.
+HYBRID recovers 31.87% against our 28.37% — ₹227,318 more. It makes 9,192
+contacts against our 36, induces 285 opt-outs against 1, costs 2.34x as much per
+rupee recovered, and contacts 50 customers who had already paid, against our 1.
+
+Its SF-2 share of the blind set is 5.4% against our 0.1%. That is not the
+ladder's contact volume swamping a residual restraint — it is restraint being
+absent on five of six classes.
+
+We are reporting the policy we built and measured, not the one this result
+implies. The tradeoff is now quantified rather than asserted: 3.5 points of
+recovery costs 255x the customer contact.
 
 | | OURS | HYBRID | B2 |
 |---|---|---|---|
