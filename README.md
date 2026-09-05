@@ -45,12 +45,11 @@ opt-out — and a 51.87% silent failure rate. It is the upper bound on what an
 unguarded system extracts, printed so the cost of the guardrails is visible
 rather than assumed away.
 
-**The fourth point on that chart is HYBRID, and it is not an arm we ran against
-ourselves.** It is OURS and the fixed ladder composed and routed by decline
-class, built after the per-class table below showed the whole margin sitting in
-one class. It recovers more than we do and contacts 255x as many people to get
-it. It is marked COMPOSED on the chart for that reason, and §8 has the trade in
-full.
+**The fourth point on that chart is HYBRID, and it is not a competitor either.**
+It composes OURS and the fixed ladder, routed by decline class, built after the
+per-class table below showed the whole margin sitting in one class. It recovers
+31.87% against our 28.37% and contacts 9,192 customers to do it, against our 36.
+Marked COMPOSED for that reason. §8 has the trade in full.
 
 ### The two rows nobody else prints
 
