@@ -97,12 +97,21 @@ blind set and stops after one retry, before the settlements land.
 
 ### Restraint
 
-> OURS dispatches 33,995 actions against B2's 33,027. It is more active and less
-> intrusive. Far fewer CONTACTS, not less work.
+OURS dispatches 33,995 actions against B2's 33,027, and 36 of them reach a
+customer. Everything else is a retry or a rail switch — a message to the bank,
+not to the person. Those cost 5 paise each and consume none of their patience. A
+contact costs 15 and some of it, and that asymmetry is the entire policy.
 
-The restraint is in *contacts*, not in effort. `settle` retries, switches rails
-and requests mandate updates more than the ladder does. It just does not message
-people, because in this world messaging them mostly is not worth what it costs.
+`out/metrics.json` records dispatches as a total and does not break them down by
+verb, so the retries cannot be separated from the rail switches here. What it
+does record is the spend, and the spend settles the composition on its own:
+₹1,703.35 for the run, which is exactly 5 paise for every dispatch except the 36
+and 15 paise for each of those. Nothing else fits inside it — no WhatsApp at 35
+paise, no voice call at 400, no human escalation at 5,000, and no free
+`do_nothing` padding the count.
+
+That is why "far fewer contacts" is not "less work". The restraint is in every
+action but those 36 costing the customer nothing, not in doing fewer of them.
 
 **That is a claim about contacts, not about our contacts being better.** Seven of
 the fourteen swept priors leave OURS completely unmoved, because a policy making
@@ -565,9 +574,8 @@ by a real webhook through a real tunnel.
 It took two attempts, and the first one failing is the more useful half. Razorpay
 declined it with `international_transaction_not_allowed` — the card used was
 Razorpay's *international* test card and this account accepts domestic Indian
-cards only. That is a property of the test account, not a defect in `settle`, and
-a real decline beside a real capture in one verifiable chain is worth more than a
-clean single capture.
+cards only. A real decline beside a real capture in one verifiable chain is worth
+more than a clean single capture.
 
 Each webhook was verified by HMAC SHA256 **before its body was parsed**, checked
 against an event-id idempotency store, and written to the hash-chained ledger.

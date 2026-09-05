@@ -341,17 +341,25 @@ def test_CHT_3_the_readme_headline_matches_the_artefact_exactly() -> None:
     assert f"{ours['silent_failure_rate'] * 100:.2f}%" in readme
     assert f"{data['arms']['B3']['compliance_violations']:,}" in readme
 
-    # A99's restraint sentence, verbatim. It is the one claim in the README
-    # whose exact wording was specified, because "more active and less
-    # intrusive" is the distinction the whole result turns on. Compared against
-    # a whitespace-normalised copy: it is set as a blockquote, so the source
-    # carries "> " prefixes and line breaks the sentence itself does not.
+    # A99's restraint finding, in both halves. Until CP19.1 this pinned one
+    # sentence verbatim — "more active and less intrusive. Far fewer CONTACTS,
+    # not less work" — because that distinction is what the result turns on.
+    # The sentence asserted it and never showed it: a reader was told 33,995
+    # dispatches and 36 contacts were the same system and never told what the
+    # other 33,959 were or what they cost. It is the composition now, so the
+    # counts are pinned against the artefact and A99's claim is pinned as a
+    # claim. Compared against a whitespace-normalised copy, because the source
+    # wraps and the sentences do not.
     flat = " ".join(readme.replace("\n> ", " ").replace("> ", "").split())
     assert (
         f"OURS dispatches {ours['dispatches']:,} actions against B2's "
-        f"{b2['dispatches']:,}. It is more active and less intrusive. "
-        "Far fewer CONTACTS, not less work." in flat
-    ), "A99's restraint sentence is not present verbatim"
+        f"{b2['dispatches']:,}, and {ours['contacts']} of them reach a customer."
+        in flat
+    ), "the restraint composition does not match the artefact"
+    assert 'That is why "far fewer contacts" is not "less work".' in flat, (
+        "A99 requires the README to say 'far fewer contacts' and to refuse the "
+        "reading 'far less work'"
+    )
 
     # §19 fixes the section order and it does not change.
     positions = [

@@ -1,0 +1,61 @@
+# CP19.1 — two sentences.
+
+README.md
+tests/test_charts.py
+checkpoints/cp19_1.allowlist
+
+# tests/test_charts.py was added to this allowlist mid-checkpoint, asked and
+# approved. See the block below.
+
+# --- F45. The slogan, replaced by the composition -----------------------------
+#
+# §1 told a reader that 33,995 dispatches and 36 contacts were the same system
+# and never said what the other 33,959 were or what they cost. The sentence
+# asserted the distinction the whole result turns on and never showed it.
+#
+# metrics.json has no breakdown by verb, so retries cannot be separated from
+# rail switches and the README now says so rather than guessing a split. What it
+# does have is the spend, and the spend closes the composition exactly:
+#
+#     spend_paise                       170,335
+#     (33,995 - 36) x 5 paise    =      169,795     retry / switch_rail
+#     36 x 15 paise              =          540     one contact, sms channel
+#                                       -------
+#                                       170,335     exact
+#
+# Nothing else fits inside that total: no WhatsApp at 35 paise, no voice call at
+# 400, no escalation at 5,000, and no `do_nothing` at 0 padding the dispatch
+# count — a single do_nothing in the total would leave the arithmetic short.
+# Costs from PRIORS.md action_cost.*.
+#
+# 33,959 and 169,795 and 540 are NOT in the README. They are subtractions and
+# products of artefact values, and no artefact holds them, so CHT-3 would reject
+# them. The two ways round that are the two this project refuses: a fenced code
+# block, which CHT-3 strips before extracting numbers and which would pass while
+# checking nothing, and spelling the digits out as words. The prose gives the
+# backed numbers and leaves the arithmetic to the reader. The derivation lives
+# here instead, where nothing claims it was checked by a test.
+
+# --- The stop, and what was approved ------------------------------------------
+#
+# F45 said replace the slogan. The slogan was pinned in two places outside the
+# allowlist:
+#
+#   tests/test_charts.py:350   asserted it verbatim
+#   SPEC.md §15.2 (A99)        "The README must say 'far fewer contacts' and
+#                              must not permit the reading 'far less work'."
+#
+# Stopped and asked rather than editing either or quietly keeping the sentence.
+# Approved: add tests/test_charts.py, leave SPEC alone. A99 requires the claim,
+# not that rendering of it, and the README still makes the claim in the last
+# paragraph — "That is why 'far fewer contacts' is not 'less work'." So the
+# amendment stands unchanged and the test now pins both halves: the dispatch and
+# contact counts against out/metrics.json, and A99's claim as a claim.
+
+# --- F46. The flinch ----------------------------------------------------------
+#
+# "That is a property of the test account, not a defect in `settle`" deleted
+# from §9. The sentence after it — a real decline beside a real capture in one
+# verifiable chain is worth more than a clean single capture — is the stronger
+# argument and was being made in the same breath as a denial nobody had asked
+# for. Nothing else in that paragraph changed.
