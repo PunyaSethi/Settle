@@ -2,6 +2,8 @@
 
 **36 contacts. 10,000 cases. More money back than a fixed dunning ladder that sent 14,027.**
 
+**[5-minute walkthrough →](https://www.youtube.com/watch?v=nNQHXRbNQbs)**
+
 `settle` is a recovery agent for failed subscription mandates that is correct
 when it cannot trust what it is told about outcomes. It is **simulated at scale
 and real at the edges**: the 10,000-case batch below is synthetic and seeded, and

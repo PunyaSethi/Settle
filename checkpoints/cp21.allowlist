@@ -1,0 +1,25 @@
+# CP21 — video link in README. One line.
+
+README.md
+checkpoints/cp21.allowlist
+
+# The link sits between the hook and the opening paragraph, which is the only
+# place it does not interrupt something: a judge who wants the walkthrough gets
+# it before the argument starts, and a reader who does not steps over one line.
+
+# --- In flight, and deliberately not in this commit ---------------------------
+#
+# CP20 is unfinished in the working tree — settle/eval/report.py, its own
+# allowlist, and a §4 paragraph in README.md that was reverted before this
+# commit and restored after it, so "one line" is literally one line.
+#
+# out/model_report.json is being rewritten by the 10,000-case rerun CP20 needs,
+# which was still running when this was committed. It is not part of CP21 and
+# nothing here depends on it.
+#
+# CHT-3 was run rather than the full gate: this checkpoint changes no number and
+# the suite was competing with the rerun for the machine.
+
+settle/eval/report.py
+checkpoints/cp20.allowlist
+out/model_report.json
